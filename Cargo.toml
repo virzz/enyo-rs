@@ -1,0 +1,21 @@
+[package]
+authors = ["Mozhu <mozhu233@outlook.com>"]
+description = "The Cyber Swiss Army Knife for terminal"
+name = "enyo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.24", features = ["env", "string", "unicode", "derive"] }
+serde = { version = "1.0.217", features = ["derive", "serde_derive"] }
+anyhow = "1.0.95"
+chrono = "0.4.39"
+serde_derive = "1.0.217"
+serde_json = "1.0.135"
+
+base32 = "0.5.1"
+base64 = "0.22.1"
+regex = "1.10.5"
+reqwest = { version = "0.12.5", features = ["json"] }
+tokio = { version = "1.43.0", features = ["full"] }
+url = "2.5.2"
