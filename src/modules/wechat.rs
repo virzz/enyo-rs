@@ -7,7 +7,7 @@ use std::{
 use clap::{Parser, ValueEnum};
 
 use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, KeyIvInit};
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use csv::WriterBuilder;
 use hmac::{Hmac, Mac};
 use json::JsonValue;
@@ -267,7 +267,7 @@ fn do_exec(
     Ok(())
 }
 
-pub fn execute(args: &Args) {
+pub fn execute(args: &Args) -> Result<()> {
     let key = args.key.clone();
     let file = args.file.clone();
     let rawkey = args.rawkey.clone();
@@ -276,31 +276,15 @@ pub fn execute(args: &Args) {
         None => WechatDbType::V3,
     };
     if let Some(sql) = args.sql.clone() {
-        match convert_to_sqlcipher_rawkey(&key, &file, &ver) {
-            Ok(pkey) => {
-                let output = args.output.clone().unwrap_or(WechatExecOutput::Table);
-                match do_exec(&file, &sql, &pkey, &ver, &output) {
-                    Ok(_) => {}
-                    Err(e) => eprintln!("{}", e),
-                }
-            }
-            Err(e) => eprintln!("{}", e),
-        }
-        return;
+        let pkey = convert_to_sqlcipher_rawkey(&key, &file, &ver)?;
+        let output = args.output.clone().unwrap_or(WechatExecOutput::Table);
+        do_exec(&file, &sql, &pkey, &ver, &output)?;
+    } else if rawkey {
+        convert_to_sqlcipher_rawkey(&key, &file, &ver)?;
     }
-    if rawkey {
-        match convert_to_sqlcipher_rawkey(&key, &file, &ver) {
-            Ok(r) => println!("0x{}", r),
-            Err(e) => eprintln!("{}", e),
-        }
-        return;
-    }
-    match decrypt_db(&file, &key, &ver) {
-        Ok(r) => {
-            let path = file.with_extension("decrypted.db");
-            fs::write(path.clone(), r).unwrap();
-            println!("Decrypted file: {:?}", path);
-        }
-        Err(e) => eprintln!("{}", e),
-    }
+    let buf = decrypt_db(&file, &key, &ver)?;
+    let path = file.with_extension("decrypted.db");
+    fs::write(path.clone(), buf)?;
+    println!("Decrypted file: {:?}", path);
+    Ok(())
 }

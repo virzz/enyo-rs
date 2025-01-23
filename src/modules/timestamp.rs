@@ -41,7 +41,7 @@ fn _execute(t: String, fmt: Option<String>) -> Result<String, ()> {
     Err(())
 }
 
-pub fn execute(args: &Args) {
+pub fn execute(args: &Args) -> Result<()> {
     match args.time.clone() {
         None => println!("{}", Local::now().timestamp()),
         Some(ts) => {
@@ -55,6 +55,7 @@ pub fn execute(args: &Args) {
             println!("{}", result.join("\n"));
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -63,7 +64,7 @@ mod tests {
 
     #[test]
     fn test_execute_none() {
-        execute(&Args {
+        let _ = execute(&Args {
             format: None,
             time: None,
         });
@@ -71,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_execute_multi() {
-        execute(&Args {
+        let _ = execute(&Args {
             format: None,
             time: Some(vec![
                 "1736441819".to_string(),

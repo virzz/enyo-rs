@@ -16,6 +16,9 @@ struct Args {
 fn main() {
     let cli = Args::parse();
     if let Some(cmd) = cli.command {
-        cmd.run()
+        match cmd.run() {
+            Ok(_) => {}
+            Err(e) => eprintln!("{}", e),
+        };
     }
 }
