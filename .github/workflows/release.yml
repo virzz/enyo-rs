@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     name: Build - ${{ matrix.platform.os-name }}
-    # Skip prereleases (tags containing -)
     if: ${{ !contains(github.ref, '-') }}
     runs-on: ${{ matrix.platform.runs-on }}
     strategy:
@@ -39,6 +38,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ${{ matrix.platform.target }}
+          cache-targets: true
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1
