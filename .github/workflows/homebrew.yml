@@ -1,0 +1,60 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag-name:
+        description: 'The git tag name to bump the formula to (e.g., v0.1.0)'
+        required: true
+
+jobs:
+  trigger-homebrew-update:
+    name: Trigger Homebrew Formula Update
+    runs-on: ubuntu-latest
+    # Skip prereleases
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    steps:
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag-name }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Wait for release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          echo "Waiting for release assets for tag $TAG..."
+          
+          # Wait up to 30 minutes for assets
+          for i in {1..60}; do
+            ASSETS=$(gh api repos/${{ github.repository }}/releases/tags/$TAG --jq '.assets | length')
+            echo "Found $ASSETS assets..."
+            # Expect at least 4 platform archives
+            if [ "$ASSETS" -ge 4 ]; then
+              echo "All assets are available!"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Timeout waiting for release assets"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Trigger homebrew-enyo update
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          gh api repos/virzz/homebrew-enyo/dispatches \
+            -f event_type=update-formula \
+            -f 'client_payload[version]=${{ steps.version.outputs.version }}'
