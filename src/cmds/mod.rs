@@ -4,7 +4,6 @@
 use anyhow::Result;
 use clap::Subcommand;
 
-pub mod _image;
 pub mod basex;
 pub mod basic;
 pub mod encrypt;
@@ -13,6 +12,7 @@ pub mod githack;
 pub mod gopher;
 pub mod hash;
 pub mod hashpow;
+pub mod image;
 pub mod jwttool;
 pub mod parser;
 pub mod qrcode;
@@ -34,10 +34,6 @@ pub enum Command {
     /// Shell completion scripts
     #[clap(alias = "comp")]
     Completion(completion::Cmd),
-
-    /// Image processing tools (convert, resize, icon, exif)
-    #[clap(alias = "img")]
-    Image(_image::Cmd),
 
     /// Base encoding/decoding tools (base16/32/36/58/62/64/91/100)
     #[clap(alias = "bx")]
@@ -69,6 +65,10 @@ pub enum Command {
     #[clap(alias = "pow")]
     Hashpow(hashpow::Cmd),
 
+    /// Image processing tools (convert, resize, icon, exif)
+    #[clap(alias = "img")]
+    Image(image::Cmd),
+
     /// JWT tool with Print/Crack/Modify/Create
     #[clap(alias = "jwt")]
     Jwttool(jwttool::Cmd),
@@ -98,7 +98,6 @@ impl Command {
         match self {
             Command::External(args) => external(args),
             Command::Completion(c) => c.execute().await,
-            Command::Image(c) => c.execute().await,
             Command::Basex(c) => c.execute().await,
             Command::Basic(c) => c.execute().await,
             Command::Encrypt(c) => c.execute().await,
@@ -107,6 +106,7 @@ impl Command {
             Command::Gopher(c) => c.execute().await,
             Command::Hash(c) => c.execute().await,
             Command::Hashpow(c) => c.execute().await,
+            Command::Image(c) => c.execute().await,
             Command::Jwttool(c) => c.execute().await,
             Command::Parser(c) => c.execute().await,
             Command::Qrcode(c) => c.execute().await,

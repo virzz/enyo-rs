@@ -53,7 +53,9 @@ ctr = "0.9"
 hash = "0.3.0"
 hex = "0.4.3"
 hmac = "0.12.1"
-image = "0.25"
+image = { version = "0.25", features = ["ico", "webp"] }
+kamadak-exif = "0.5"
+ico = "0.4"
 indicatif = { version = "0.18.3", features = ["rayon"] }
 lazy_static = "1.5.0"
 libsqlite3-sys = { version = "0.36.0", features = [
@@ -79,9 +81,11 @@ sha3 = "0.10"
 sitemap = "0.4.1"
 url = "2.5.2"
 urlencoding = "2.1"
+rmcp = { version = "0.12.0", features = ["server", "macros", "auth"] }
 
 [build-dependencies]
 clap_complete = "4.5.47"
 
 [dev-dependencies]
 env_logger = "0.11.8"
+tempfile = "3.15"
