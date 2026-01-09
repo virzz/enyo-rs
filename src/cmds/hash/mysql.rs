@@ -1,4 +1,4 @@
-use sha1::{Sha1, Digest};
+use sha1::{Digest, Sha1};
 
 /// MySQL Hash password using pre-4.1 method
 pub fn mysql_hash(password: &[u8]) -> String {
@@ -51,4 +51,3 @@ mod tests {
         assert!(result.starts_with("*"));
     }
 }
-

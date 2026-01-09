@@ -71,11 +71,19 @@ pub fn parse_proc_net(src: &str) -> Result<String> {
     };
 
     let mut results = Vec::new();
-    let re = Regex::new(r"(?m)(\d:) ([0-9a-fA-F]+):([0-9a-fA-F]+) ([0-9a-fA-F]+):([0-9a-fA-F]+) ([0-9a-fA-F]+)")?;
+    let re = Regex::new(
+        r"(?m)(\d:) ([0-9a-fA-F]+):([0-9a-fA-F]+) ([0-9a-fA-F]+):([0-9a-fA-F]+) ([0-9a-fA-F]+)",
+    )?;
 
     for cap in re.captures_iter(&data_str) {
-        let state_code = cap.get(6).map(|m| m.as_str().to_uppercase()).unwrap_or_default();
-        let state = TCP_STATE.get(state_code.as_str()).unwrap_or(&"").to_string();
+        let state_code = cap
+            .get(6)
+            .map(|m| m.as_str().to_uppercase())
+            .unwrap_or_default();
+        let state = TCP_STATE
+            .get(state_code.as_str())
+            .unwrap_or(&"")
+            .to_string();
 
         results.push(ProcNetTcp {
             local_ip: hex_to_ip(cap.get(2).map(|m| m.as_str()).unwrap_or("")),
@@ -133,10 +141,9 @@ mod tests {
         let sample = r#"  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
    0: 0100007F:0277 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
    1: 0100007F:1F90 00000000:0000 0A 00000000:00000000 00:00000000 00000000  1000        0 23456 1 0000000000000000 100 0 0 10 0"#;
-        
+
         let result = parse_proc_net(sample).unwrap();
         println!("{result}");
         assert!(result.contains("127.0.0.1"));
     }
 }
-

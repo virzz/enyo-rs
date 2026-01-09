@@ -94,7 +94,10 @@ pub async fn parse_ds_store(src: &str) -> Result<String> {
     let path = if src.ends_with(DS_STORE_FILE) {
         src.to_string()
     } else {
-        Path::new(src).join(DS_STORE_FILE).to_string_lossy().to_string()
+        Path::new(src)
+            .join(DS_STORE_FILE)
+            .to_string_lossy()
+            .to_string()
     };
 
     if !Path::new(&path).exists() {
@@ -108,7 +111,6 @@ pub async fn parse_ds_store(src: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[tokio::test]
     async fn test_parse_ds_store_local() {

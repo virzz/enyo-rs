@@ -127,7 +127,9 @@ pub enum SubCmd {
 }
 
 fn parse_key_value(s: &str) -> Result<(String, String), String> {
-    let pos = s.find('=').ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
@@ -142,13 +144,15 @@ impl CmdExecute for Cmd {
 
             SubCmd::Post { target, data } => {
                 let (host, path) = parse_url(target)?;
-                let data_map: std::collections::HashMap<String, String> = data.iter().cloned().collect();
+                let data_map: std::collections::HashMap<String, String> =
+                    data.iter().cloned().collect();
                 gopher_http_post_exp(&host, &path, &data_map)?
             }
 
             SubCmd::Upload { target, data } => {
                 let (host, path) = parse_url(target)?;
-                let data_map: std::collections::HashMap<String, String> = data.iter().cloned().collect();
+                let data_map: std::collections::HashMap<String, String> =
+                    data.iter().cloned().collect();
                 gopher_http_upload_exp(&host, &path, &data_map)?
             }
 
@@ -206,7 +210,11 @@ fn parse_url(target: &str) -> Result<(String, String)> {
         format!("{host}:{port}")
     };
     let path = url.path().to_string();
-    let path = if path.is_empty() { "/".to_string() } else { path };
+    let path = if path.is_empty() {
+        "/".to_string()
+    } else {
+        path
+    };
 
     Ok((host_port, path))
 }
@@ -228,7 +236,9 @@ mod tests {
 
     #[test]
     fn test_gopher_redis_write() {
-        let payload = gopher_redis_write_exp("127.0.0.1:80", "/var/www/html/", "xxx.php", "Hello world").unwrap();
+        let payload =
+            gopher_redis_write_exp("127.0.0.1:80", "/var/www/html/", "xxx.php", "Hello world")
+                .unwrap();
         println!("{payload}");
         assert!(payload.starts_with("gopher://"));
     }
@@ -249,4 +259,3 @@ mod tests {
         assert!(payload.starts_with("gopher://"));
     }
 }
-

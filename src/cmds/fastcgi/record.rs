@@ -181,8 +181,7 @@ impl FastCGIRecord {
             let version = data[offset];
             let record_type = RecordType::from(data[offset + 1]);
             let request_id = ((data[offset + 2] as u16) << 8) | (data[offset + 3] as u16);
-            let content_length =
-                ((data[offset + 4] as usize) << 8) | (data[offset + 5] as usize);
+            let content_length = ((data[offset + 4] as usize) << 8) | (data[offset + 5] as usize);
             let padding_length = data[offset + 6] as usize;
 
             if offset + 8 + content_length + padding_length > data.len() {
@@ -273,4 +272,3 @@ impl std::fmt::Display for FastCGIRecord {
         write!(f, "{}", hex::encode(self.to_bytes()))
     }
 }
-

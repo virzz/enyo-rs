@@ -6,9 +6,7 @@ pub fn xor(first: &str, second: &str) -> Result<String> {
     let second_bytes = second.as_bytes();
 
     let len = first_bytes.len().min(second_bytes.len());
-    let result: Vec<u8> = (0..len)
-        .map(|i| first_bytes[i] ^ second_bytes[i])
-        .collect();
+    let result: Vec<u8> = (0..len).map(|i| first_bytes[i] ^ second_bytes[i]).collect();
 
     Ok(String::from_utf8_lossy(&result).to_string())
 }
@@ -58,4 +56,3 @@ mod tests {
         assert_eq!(decrypted, data);
     }
 }
-

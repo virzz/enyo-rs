@@ -4,6 +4,7 @@
 use anyhow::Result;
 use clap::Subcommand;
 
+pub mod _image;
 pub mod basex;
 pub mod basic;
 pub mod encrypt;
@@ -26,13 +27,17 @@ use crate::{
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// External command
+    #[clap(external_subcommand)]
+    External(Vec<String>),
+
     /// Shell completion scripts
     #[clap(alias = "comp")]
     Completion(completion::Cmd),
 
-    /// External command
-    #[clap(external_subcommand)]
-    External(Vec<String>),
+    /// Image processing tools (convert, resize, icon, exif)
+    #[clap(alias = "img")]
+    Image(_image::Cmd),
 
     /// Base encoding/decoding tools (base16/32/36/58/62/64/91/100)
     #[clap(alias = "bx")]
@@ -91,8 +96,9 @@ pub enum Command {
 impl Command {
     pub async fn invoke(&self) -> Result<()> {
         match self {
-            Command::Completion(c) => c.execute().await,
             Command::External(args) => external(args),
+            Command::Completion(c) => c.execute().await,
+            Command::Image(c) => c.execute().await,
             Command::Basex(c) => c.execute().await,
             Command::Basic(c) => c.execute().await,
             Command::Encrypt(c) => c.execute().await,

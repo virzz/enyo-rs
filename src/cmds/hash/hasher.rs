@@ -1,6 +1,6 @@
 use anyhow::Result;
 use md4::Md4;
-use md5::{Md5, Digest};
+use md5::{Digest, Md5};
 use ripemd::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
@@ -119,13 +119,19 @@ mod tests {
     #[test]
     fn test_sha1() {
         let result = sha1_hash(b"test").unwrap();
-        assert_eq!(hex::encode(&result), "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3");
+        assert_eq!(
+            hex::encode(&result),
+            "a94a8fe5ccb19ba61c4c0873d391e987982fbbd3"
+        );
     }
 
     #[test]
     fn test_sha256() {
         let result = sha2_hash(b"test", &Sha2Type::Sha256).unwrap();
-        assert_eq!(hex::encode(&result), "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
+        assert_eq!(
+            hex::encode(&result),
+            "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        );
     }
 
     #[test]
@@ -146,4 +152,3 @@ mod tests {
         println!("MD4: {}", hex::encode(&result));
     }
 }
-

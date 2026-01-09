@@ -39,7 +39,9 @@ impl CmdExecute for Cmd {
     async fn execute(&self) -> Result<()> {
         match &self.command {
             SubCmd::Procnet { filepath, input } => {
-                let path = filepath.as_ref().or(input.as_ref())
+                let path = filepath
+                    .as_ref()
+                    .or(input.as_ref())
                     .ok_or_else(|| anyhow!("Invalid filepath"))?;
                 let result = proc_net::parse_proc_net(path)?;
                 println!("{result}");
@@ -55,7 +57,6 @@ impl CmdExecute for Cmd {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[tokio::test]
     async fn test_procnet() {
@@ -69,4 +70,3 @@ mod tests {
         // cmd.execute().await.unwrap();
     }
 }
-

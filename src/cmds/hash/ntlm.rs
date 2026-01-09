@@ -1,4 +1,4 @@
-use md4::{Md4, Digest};
+use md4::{Digest, Md4};
 
 /// Convert bytes to UTF-16LE encoding
 fn utf16le(s: &[u8]) -> Vec<u8> {
@@ -43,4 +43,3 @@ mod tests {
         assert_eq!(result, vec![b't', 0, b'e', 0, b's', 0, b't', 0]);
     }
 }
-

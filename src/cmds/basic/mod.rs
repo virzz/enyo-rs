@@ -8,10 +8,7 @@ mod string;
 mod url;
 mod xor;
 
-use crate::{
-    core::{input, output},
-    CmdExecute,
-};
+use crate::{core::input, CmdExecute};
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]
@@ -26,95 +23,90 @@ pub struct Cmd {
 
 #[derive(Subcommand)]
 pub enum SubCmd {
-    // === URL 编码 ===
     /// URL encode
-    #[clap(alias = "urle", alias = "urlencode")]
-    UrlEncode {
+    #[clap(alias = "urle")]
+    Urlencode {
         /// Raw encode: + -> %20
         #[arg(short, long)]
         raw: bool,
     },
 
     /// URL decode
-    #[clap(alias = "urld", alias = "urldecode")]
-    UrlDecode,
+    #[clap(alias = "urld")]
+    Urldecode,
 
-    // === Bin 编码 ===
     /// Bin -> Hex (将二进制数据转为十六进制)
     #[clap(alias = "b2h")]
-    Bin2Hex,
+    Bin2hex,
 
     /// Hex -> Bin (将十六进制转为二进制数据)
     #[clap(alias = "h2b")]
-    Hex2Bin,
+    Hex2bin,
 
-    // === String 相关 ===
     /// String -> ASCII (字符串转ASCII码)
     #[clap(alias = "chr2ord", alias = "ords")]
-    Str2Ascii,
+    Str2ascii,
 
     /// ASCII -> String (ASCII码转字符串)
     #[clap(alias = "ord2str", alias = "chrs")]
-    Ascii2Str,
+    Ascii2str,
 
     /// Hex -> String (十六进制转字符串)
     #[clap(alias = "h2s")]
-    Hex2Str,
+    Hex2str,
 
     /// String -> Hex (字符串转十六进制)
     #[clap(alias = "s2h")]
-    Str2Hex,
+    Str2hex,
 
     /// Hex -> Dec (十六进制转十进制)
     #[clap(alias = "h2d")]
-    Hex2Dec,
+    Hex2dec,
 
     /// Dec -> Hex (十进制转十六进制)
     #[clap(alias = "d2h")]
-    Dec2Hex,
+    Dec2hex,
 
     /// Hex -> Bytes String (十六进制转字节字符串 b'...')
     #[clap(alias = "h2bs")]
-    Hex2Bytes,
+    Hex2bytes,
 
     /// Bytes String -> Hex (字节字符串转十六进制)
     #[clap(alias = "bs2h")]
-    Bytes2Hex,
+    Bytes2hex,
 
     /// Bytes String -> String (字节字符串转字符串)
     #[clap(alias = "bs2s")]
-    Bytes2Str,
+    Bytes2str,
 
-    // === XOR 加密 ===
     /// XOR two strings
     Xor,
 
-    // === 随机字符串 ===
     /// Generate random string
     #[clap(alias = "rstr")]
-    RandStr {
+    Randstr {
         /// Length of random string (default: 8)
-        #[arg(default_value = "8")]
+        #[arg(long = "len", default_value = "8")]
         length: usize,
 
         /// Regex for allowed chars (default: a-z0-9)
-        #[arg(short, long, default_value = "a-z0-9")]
+        #[arg(short = 'r', long, default_value = "a-z0-9")]
         regex: String,
 
         /// Use uppercase letters only
-        #[arg(short, long)]
+        #[arg(short = 'u', long, default_value_t = false)]
         upper: bool,
 
         /// Use lowercase letters only
-        #[arg(short, long)]
+        #[arg(short = 'l', long, default_value_t = false)]
         lower: bool,
 
         /// Use digits only
-        #[arg(short, long)]
+        #[arg(short = 'd', long, default_value_t = false)]
         digit: bool,
 
         /// Use hex characters only (0-9a-f)
-        #[arg(short = 'x', long)]
+        #[arg(short = 'x', long, default_value_t = false)]
         hex: bool,
     },
 }
@@ -122,9 +114,9 @@ pub enum SubCmd {
 impl CmdExecute for Cmd {
     async fn execute(&self) -> Result<()> {
         if let Some(command) = &self.command {
-            // RandStr 命令不需要输入数据
             let (data, data_str) = match command {
-                SubCmd::RandStr { .. } => (Vec::new(), String::new()),
+                // Randstr 命令不需要输入数据
+                SubCmd::Randstr { .. } => (Vec::new(), String::new()),
                 _ => {
                     let d = input(&self.inputs)?;
                     let s = String::from_utf8_lossy(&d).trim().to_string();
@@ -134,78 +126,62 @@ impl CmdExecute for Cmd {
 
             match command {
                 // URL
-                SubCmd::UrlEncode { raw } => {
-                    let result = url::url_encode(&data_str, *raw)?;
-                    println!("{result}");
+                SubCmd::Urlencode { raw } => {
+                    println!("{}", url::url_encode(&data_str, *raw)?);
                 }
-                SubCmd::UrlDecode => {
-                    let result = url::url_decode(&data_str)?;
-                    println!("{result}");
+                SubCmd::Urldecode => {
+                    println!("{}", url::url_decode(&data_str)?);
                 }
-
                 // Bin
-                SubCmd::Bin2Hex => {
-                    let result = bin::bin_to_hex(&data)?;
-                    println!("{result}");
+                SubCmd::Bin2hex => {
+                    println!("{}", bin::bin_to_hex(&data)?);
                 }
-                SubCmd::Hex2Bin => {
-                    output(&bin::hex_to_bin(&data_str)?, false)?;
+                SubCmd::Hex2bin => {
+                    println!("{}", String::from_utf8_lossy(&bin::hex_to_bin(&data_str)?));
                 }
 
                 // String
-                SubCmd::Str2Ascii => {
-                    let result = string::string_to_ascii(&data_str)?;
-                    println!("{result}");
+                SubCmd::Str2ascii => {
+                    println!("{}", string::string_to_ascii(&data_str)?);
                 }
-                SubCmd::Ascii2Str => {
-                    let result = string::ascii_to_string(&data_str)?;
-                    println!("{result}");
+                SubCmd::Ascii2str => {
+                    println!("{}", string::ascii_to_string(&data_str)?);
                 }
-                SubCmd::Hex2Str => {
-                    let result = string::hex_to_string(&data_str)?;
-                    println!("{result}");
+                SubCmd::Hex2str => {
+                    println!("{}", string::hex_to_string(&data_str)?);
                 }
-                SubCmd::Str2Hex => {
-                    let result = string::string_to_hex(&data_str)?;
-                    println!("{result}");
+                SubCmd::Str2hex => {
+                    println!("{}", string::string_to_hex(&data_str)?);
                 }
-                SubCmd::Hex2Dec => {
-                    let result = string::hex_to_dec(&data_str)?;
-                    println!("{result}");
+                SubCmd::Hex2dec => {
+                    println!("{}", string::hex_to_dec(&data_str)?);
                 }
-                SubCmd::Dec2Hex => {
-                    let result = string::dec_to_hex(&data_str)?;
-                    println!("{result}");
+                SubCmd::Dec2hex => {
+                    println!("{}", string::dec_to_hex(&data_str)?);
                 }
-                SubCmd::Hex2Bytes => {
-                    let result = string::hex_to_byte_string(&data_str)?;
-                    println!("{result}");
+                SubCmd::Hex2bytes => {
+                    println!("{}", string::hex_to_byte_string(&data_str)?);
                 }
-                SubCmd::Bytes2Hex => {
-                    let result = string::byte_string_to_hex(&data_str)?;
-                    println!("{result}");
+                SubCmd::Bytes2hex => {
+                    println!("{}", string::byte_string_to_hex(&data_str)?);
                 }
-                SubCmd::Bytes2Str => {
-                    let result = string::byte_string_to_string(&data_str)?;
-                    println!("{result}");
+                SubCmd::Bytes2str => {
+                    println!("{}", string::byte_string_to_string(&data_str)?);
                 }
 
                 // XOR
                 SubCmd::Xor => {
                     if let Some(inputs) = &self.inputs {
                         if inputs.len() >= 2 {
-                            let result = xor::xor(&inputs[0], &inputs[1])?;
-                            println!("{result}");
-                        } else {
-                            return Err(anyhow!("XOR requires at least 2 arguments"));
+                            println!("{}", xor::xor(&inputs[0], &inputs[1])?);
+                            return Ok(());
                         }
-                    } else {
-                        return Err(anyhow!("XOR requires at least 2 arguments"));
                     }
+                    return Err(anyhow!("XOR requires at least 2 arguments"));
                 }
 
                 // Random String
-                SubCmd::RandStr {
+                SubCmd::Randstr {
                     length,
                     regex,
                     upper,
@@ -224,8 +200,7 @@ impl CmdExecute for Cmd {
                     } else {
                         regex.as_str()
                     };
-                    let result = string::random_string(*length, charset)?;
-                    println!("{result}");
+                    println!("{}", string::random_string(*length, charset)?);
                 }
             }
             return Ok(());
@@ -241,7 +216,7 @@ mod tests {
     #[tokio::test]
     async fn test_url_encode() {
         let cmd = Cmd {
-            command: Some(SubCmd::UrlEncode { raw: false }),
+            command: Some(SubCmd::Urlencode { raw: false }),
             inputs: Some(vec!["hello world".to_string()]),
         };
         cmd.execute().await.unwrap();
@@ -250,7 +225,7 @@ mod tests {
     #[tokio::test]
     async fn test_url_decode() {
         let cmd = Cmd {
-            command: Some(SubCmd::UrlDecode),
+            command: Some(SubCmd::Urldecode),
             inputs: Some(vec!["hello%20world".to_string()]),
         };
         cmd.execute().await.unwrap();
@@ -259,7 +234,7 @@ mod tests {
     #[tokio::test]
     async fn test_bin2hex() {
         let cmd = Cmd {
-            command: Some(SubCmd::Bin2Hex),
+            command: Some(SubCmd::Bin2hex),
             inputs: Some(vec!["test".to_string()]),
         };
         cmd.execute().await.unwrap();
@@ -268,7 +243,7 @@ mod tests {
     #[tokio::test]
     async fn test_str2ascii() {
         let cmd = Cmd {
-            command: Some(SubCmd::Str2Ascii),
+            command: Some(SubCmd::Str2ascii),
             inputs: Some(vec!["test_string_virzz".to_string()]),
         };
         cmd.execute().await.unwrap();
@@ -286,7 +261,7 @@ mod tests {
     #[tokio::test]
     async fn test_randstr() {
         let cmd = Cmd {
-            command: Some(SubCmd::RandStr {
+            command: Some(SubCmd::Randstr {
                 length: 16,
                 regex: "a-z0-9".to_string(),
                 upper: false,

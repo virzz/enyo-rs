@@ -19,4 +19,3 @@ pub fn query_escape(s: &str, count: usize) -> String {
     }
     result
 }
-

@@ -65,4 +65,3 @@ mod tests {
         assert_eq!(result, "hello world");
     }
 }
-

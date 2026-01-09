@@ -2,7 +2,9 @@ use anyhow::Result;
 
 /// 处理 hex 字符串前缀
 fn strip_hex_prefix(s: &str) -> &str {
-    s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s)
+    s.strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s)
 }
 
 /// 添加 0x 前缀
@@ -48,4 +50,3 @@ mod tests {
         assert_eq!(result, b"Hello");
     }
 }
-

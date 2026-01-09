@@ -67,10 +67,16 @@ impl EncryptFileInfo {
         let is_compress = data[len - 7] == 1;
 
         // size (4 bytes, little endian)
-        let size = u32::from_le_bytes([data[len - 11], data[len - 10], data[len - 9], data[len - 8]]);
+        let size =
+            u32::from_le_bytes([data[len - 11], data[len - 10], data[len - 9], data[len - 8]]);
 
-        // block (4 bytes, little endian)  
-        let block = u32::from_le_bytes([data[len - 15], data[len - 14], data[len - 13], data[len - 12]]);
+        // block (4 bytes, little endian)
+        let block = u32::from_le_bytes([
+            data[len - 15],
+            data[len - 14],
+            data[len - 13],
+            data[len - 12],
+        ]);
 
         // ext
         let ext_start = len - 15 - ext_size;
@@ -126,4 +132,3 @@ mod tests {
         assert!(EncryptFileInfo::from_bytes(data).is_none());
     }
 }
-

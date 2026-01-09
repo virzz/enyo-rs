@@ -1,9 +1,9 @@
 use anyhow::Result;
 use hmac::{Hmac, Mac};
 use md4::Md4;
-use md5::Md5;
 #[allow(unused_imports)]
 use md5::Digest;
+use md5::Md5;
 use ripemd::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256};
@@ -132,4 +132,3 @@ mod tests {
         println!("HMAC-SHA256: {}", hex::encode(&result));
     }
 }
-

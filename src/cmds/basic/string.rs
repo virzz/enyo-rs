@@ -2,11 +2,13 @@ use anyhow::{anyhow, Result};
 use rand::Rng;
 use regex::Regex;
 
-use super::bin::{hex_to_bin, bin_to_hex};
+use super::bin::{bin_to_hex, hex_to_bin};
 
 /// 处理 hex 字符串前缀
 fn strip_hex_prefix(s: &str) -> &str {
-    s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s)
+    s.strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s)
 }
 
 /// 添加 0x 前缀
@@ -88,7 +90,9 @@ pub fn hex_to_byte_string(s: &str) -> Result<String> {
 /// 解析 b'...' 或 b"..." 格式
 pub fn byte_string_to_hex(s: &str) -> Result<String> {
     let re = Regex::new(r#"^b["']([\S\s]*?)['"]$"#)?;
-    let captures = re.captures(s).ok_or_else(|| anyhow!("Invalid byte string format"))?;
+    let captures = re
+        .captures(s)
+        .ok_or_else(|| anyhow!("Invalid byte string format"))?;
     let content = captures.get(1).map_or("", |m| m.as_str());
 
     let mut result = Vec::new();
@@ -122,7 +126,6 @@ pub fn random_string(length: usize, charset_pattern: &str) -> Result<String> {
     if charset.is_empty() {
         return Err(anyhow!("Empty charset"));
     }
-
     let mut rng = rand::rng();
     let result: String = (0..length)
         .map(|_| {
@@ -165,13 +168,18 @@ mod tests {
     #[test]
     fn test_string_to_ascii() {
         let result = string_to_ascii("test_string_virzz").unwrap();
-        assert_eq!(result, "116,101,115,116,95,115,116,114,105,110,103,95,118,105,114,122,122");
+        assert_eq!(
+            result,
+            "116,101,115,116,95,115,116,114,105,110,103,95,118,105,114,122,122"
+        );
         println!("String to ASCII: {result}");
     }
 
     #[test]
     fn test_ascii_to_string() {
-        let result = ascii_to_string("116,101,115,116,95,115,116,114,105,110,103,95,118,105,114,122,122").unwrap();
+        let result =
+            ascii_to_string("116,101,115,116,95,115,116,114,105,110,103,95,118,105,114,122,122")
+                .unwrap();
         assert_eq!(result, "test_string_virzz");
         println!("ASCII to String: {result}");
     }
@@ -206,15 +214,21 @@ mod tests {
 
     #[test]
     fn test_hex_to_byte_string() {
-        let result = hex_to_byte_string("0x746573745f11aa22bb33cc44dd55ee66ff7788995f737472696e67").unwrap();
+        let result =
+            hex_to_byte_string("0x746573745f11aa22bb33cc44dd55ee66ff7788995f737472696e67").unwrap();
         println!("Hex to Byte String: {result}");
         assert!(result.starts_with("b'test_"));
     }
 
     #[test]
     fn test_byte_string_to_hex() {
-        let result = byte_string_to_hex(r#"b'test_\x11\xaa"\xbb3\xccD\xddU\xeef\xffw\x88\x99_string'"#).unwrap();
-        assert_eq!(result, "0x746573745f11aa22bb33cc44dd55ee66ff7788995f737472696e67");
+        let result =
+            byte_string_to_hex(r#"b'test_\x11\xaa"\xbb3\xccD\xddU\xeef\xffw\x88\x99_string'"#)
+                .unwrap();
+        assert_eq!(
+            result,
+            "0x746573745f11aa22bb33cc44dd55ee66ff7788995f737472696e67"
+        );
         println!("Byte String to Hex: {result}");
     }
 
@@ -251,4 +265,3 @@ mod tests {
         assert_eq!(charset.len(), 36);
     }
 }
-
