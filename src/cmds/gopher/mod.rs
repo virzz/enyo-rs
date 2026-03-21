@@ -4,7 +4,7 @@
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use crate::CmdExecute;
+use crate::Action;
 
 mod fastcgi_exp;
 mod http_exp;
@@ -133,7 +133,8 @@ fn parse_key_value(s: &str) -> Result<(String, String), String> {
     Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let result = match &self.command {
             SubCmd::Fastcgi {

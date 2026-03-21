@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 mod ds_store;
 mod proc_net;
 
-use crate::CmdExecute;
+use crate::Action;
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]
@@ -35,7 +35,8 @@ pub enum SubCmd {
     },
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match &self.command {
             SubCmd::Procnet { filepath, input } => {

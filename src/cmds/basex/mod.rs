@@ -24,7 +24,7 @@ use base64::{Base64Standard, Base64UrlSafe};
 use base91::Base91;
 use ext::fuzzing;
 
-use crate::{core, CmdExecute};
+use crate::{core, Action};
 
 pub trait BaseX {
     fn encode(data: &[u8]) -> Result<String>;
@@ -122,7 +122,8 @@ pub enum SubCommand {
     Base100d,
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let data = core::input(&self.input.clone())?;
         match &self.cmds {

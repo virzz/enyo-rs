@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use std::process::Command;
 
-use crate::CmdExecute;
+use crate::Action;
 
 #[derive(Parser)]
 #[command(name = "gh-mozhu")]
@@ -133,7 +133,8 @@ impl CommitType {
 // <\n>
 // [FOOTER]
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let mut header = String::new();
 

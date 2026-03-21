@@ -178,7 +178,7 @@ fn convert_to_sqlcipher_rawkey(pkey: &str, path: &PathBuf, ver: &WechatDbType) -
 
 use comfy_table::{Cell, Row, Table};
 
-use crate::CmdExecute;
+use crate::Action;
 
 fn do_exec(
     path: &PathBuf,
@@ -270,7 +270,8 @@ fn do_exec(
     Ok(())
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let key = self.key.clone();
         let file = self.file.clone();

@@ -9,7 +9,7 @@ mod hmac_hash;
 mod mysql;
 mod ntlm;
 
-use crate::{core::input, CmdExecute};
+use crate::{core::input, Action};
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]
@@ -165,7 +165,8 @@ pub enum BcryptAction {
     },
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let data = input(&self.inputs)?;
 

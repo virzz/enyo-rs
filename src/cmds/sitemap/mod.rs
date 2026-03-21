@@ -6,7 +6,7 @@ use clap::Parser;
 use sitemap::{structs::UrlEntry, writer::SiteMapWriter};
 use std::{fs, path::Path};
 
-use crate::CmdExecute;
+use crate::Action;
 
 #[derive(Parser)]
 #[command(name = "sitemap")]
@@ -18,7 +18,8 @@ pub struct Cmd {
     output: Option<String>,
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let mut items = Vec::new();
         let input = self.input.clone();

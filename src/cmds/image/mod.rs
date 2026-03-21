@@ -12,7 +12,7 @@ mod utils;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::CmdExecute;
+use crate::Action;
 pub use types::{ImageFormatType, ResizeFilter};
 
 #[derive(Parser)]
@@ -131,7 +131,8 @@ pub enum SubCmd {
     },
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let result = match &self.command {
             SubCmd::Convert {

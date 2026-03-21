@@ -8,7 +8,7 @@ mod string;
 mod url;
 mod xor;
 
-use crate::{core::input, CmdExecute};
+use crate::{core::input, Action};
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]
@@ -110,8 +110,8 @@ pub enum SubCmd {
         hex: bool,
     },
 }
-
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         if let Some(command) = &self.command {
             let (data, data_str) = match command {

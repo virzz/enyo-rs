@@ -3,6 +3,7 @@
 
 use anyhow::Result;
 use clap::Subcommand;
+use clap_complete::aot::Shell;
 
 pub mod basex;
 pub mod basic;
@@ -20,10 +21,7 @@ pub mod sitemap;
 pub mod timestamp;
 pub mod wechat;
 
-use crate::{
-    core::{completion, external},
-    CmdExecute,
-};
+use crate::{core::external,Action};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -33,7 +31,10 @@ pub enum Command {
 
     /// Shell completion scripts
     #[clap(alias = "comp")]
-    Completion(completion::Cmd),
+    Completion {
+        #[arg(help = "shell type")]
+        shell: Option<Shell>,
+    },
 
     /// Base encoding/decoding tools (base16/32/36/58/62/64/91/100)
     #[clap(alias = "bx")]
@@ -97,7 +98,6 @@ impl Command {
     pub async fn invoke(&self) -> Result<()> {
         match self {
             Command::External(args) => external(args),
-            Command::Completion(c) => c.execute().await,
             Command::Basex(c) => c.execute().await,
             Command::Basic(c) => c.execute().await,
             Command::Encrypt(c) => c.execute().await,
@@ -113,6 +113,7 @@ impl Command {
             Command::Sitemap(c) => c.execute().await,
             Command::Timestamp(c) => c.execute().await,
             Command::Wechat(c) => c.execute().await,
+            _ => Err(anyhow::anyhow!("Unknown command")),
         }
     }
 }

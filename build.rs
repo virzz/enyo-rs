@@ -82,10 +82,10 @@ fn parse_cmd_config(dir_name: &str, mod_rs_path: &Path) -> Option<CmdConfig> {
 }
 
 /// 扫描 cmds 目录，获取所有子命令配置
-fn scan_cmds_dir(cmds_dir: &Path) -> Vec<CmdConfig> {
+fn scan_cmds_dir(modules_dir: &Path) -> Vec<CmdConfig> {
     let mut configs = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(cmds_dir) {
+    if let Ok(entries) = fs::read_dir(modules_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             // 只处理目录
@@ -93,10 +93,6 @@ fn scan_cmds_dir(cmds_dir: &Path) -> Vec<CmdConfig> {
                 continue;
             }
             let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            // 跳过 tmpl 目录（模板目录）
-            if dir_name.is_empty() || dir_name == "tmpl" {
-                continue;
-            }
             // 检查是否有 mod.rs
             let mod_rs = path.join("mod.rs");
             if mod_rs.exists() {
@@ -171,24 +167,25 @@ fn main() {
     // 获取项目根目录
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let cmds_dir = Path::new(&manifest_dir).join("src/cmds");
-    // let bin_dir = Path::new(&manifest_dir).join("src/bin");
     let mod_rs_path = cmds_dir.join("mod.rs");
 
-    // 当 cmds 目录变化时重新运行
-    println!("cargo:rerun-if-changed=src/cmds");
+    // let bin_dir = Path::new(&manifest_dir).join("src/bin");
+
+    // 当 enyo 目录变化时重新运行
+    println!("cargo:rerun-if-changed={}", cmds_dir.to_string_lossy());
 
     // 扫描子命令
-    let configs = scan_cmds_dir(&cmds_dir);
+    let cmds = scan_cmds_dir(&cmds_dir);
 
     // 为每个子命令目录设置重新构建触发
-    for config in &configs {
-        println!("cargo:rerun-if-changed=src/cmds/{}/mod.rs", config.mod_name);
+    for cmd in &cmds {
+        println!("cargo:rerun-if-changed=src/cmds/{}/mod.rs", cmd.mod_name);
     }
 
     // 生成代码
-    let mod_declarations = generate_mod_declarations(&configs);
-    let enum_variants = generate_enum_variants(&configs);
-    let match_arms = generate_match_arms(&configs);
+    let mod_declarations = generate_mod_declarations(&cmds);
+    let enum_variants = generate_enum_variants(&cmds);
+    let match_arms = generate_match_arms(&cmds);
 
     let generated_code = format!(
         r#"//! 此文件由 build.rs 自动生成，请勿手动修改
@@ -196,13 +193,11 @@ fn main() {
 
 use anyhow::Result;
 use clap::Subcommand;
+use clap_complete::aot::Shell;
 
 {mod_declarations}
 
-use crate::{{
-    core::{{completion, external}},
-    CmdExecute,
-}};
+use crate::{{core::external,Action}};
 
 #[derive(Subcommand)]
 pub enum Command {{
@@ -212,7 +207,10 @@ pub enum Command {{
 
     /// Shell completion scripts
     #[clap(alias = "comp")]
-    Completion(completion::Cmd),
+    Completion {{
+        #[arg(help = "shell type")]
+        shell: Option<Shell>,
+    }},
 
 {enum_variants}
 }}
@@ -221,8 +219,8 @@ impl Command {{
     pub async fn invoke(&self) -> Result<()> {{
         match self {{
             Command::External(args) => external(args),
-            Command::Completion(c) => c.execute().await,
 {match_arms}
+            _ => Err(anyhow::anyhow!("Unknown command")),
         }}
     }}
 }}

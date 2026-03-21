@@ -1,14 +1,17 @@
-use clap::{ArgAction::SetTrue, CommandFactory, Parser};
+use std::io;
+
+use clap::{crate_authors, ArgAction::SetTrue, CommandFactory, Parser};
+use clap_complete::{generate, Shell};
 use tracing::Level;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 pub mod cmds;
 pub mod core;
 
-pub use core::CmdExecute;
+pub use core::Action;
 
 #[derive(Parser)]
-#[command(author, version= env!("CARGO_PKG_VERSION"), about, long_about = None)]
+#[command(author=crate_authors!("\n"), version= env!("CARGO_PKG_VERSION"), about, disable_help_subcommand=true, long_about = None)]
 pub struct App {
     #[arg(short, long, action = SetTrue, default_value_t = false, help = "Enable debug mode")]
     debug: bool,
@@ -39,8 +42,21 @@ impl App {
             .init();
 
         if let Some(cmd) = &self.command {
-            if let Err(e) = cmd.invoke().await {
-                eprintln!("{e}");
+            match cmd {
+                cmds::Command::Completion { shell } => {
+                    let mut cmd = App::command();
+                    generate(
+                        shell.unwrap_or(Shell::Zsh),
+                        &mut cmd,
+                        env!("CARGO_PKG_NAME"),
+                        &mut io::stdout(),
+                    );
+                }
+                _ => {
+                    if let Err(e) = cmd.invoke().await {
+                        eprintln!("{e}");
+                    }
+                }
             }
         } else {
             let _ = App::command().print_help();

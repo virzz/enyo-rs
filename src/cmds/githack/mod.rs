@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tracing::{debug, info, warn};
 
-use crate::CmdExecute;
+use crate::Action;
 
 /// Base git files to fetch
 const BASE_FILES: &[&str] = &[
@@ -63,7 +63,8 @@ pub struct Cmd {
     pub timeout: u64,
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         git_hack(&self.target, self.limit, self.delay, self.timeout).await
     }

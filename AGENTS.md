@@ -28,10 +28,7 @@ enyo-rs/
 │   ├── main.rs         # 主入口
 │   ├── lib.rs          # 库入口
 │   ├── bin/            # 独立二进制工具
-│   │   ├── basex.rs
-│   │   ├── hash.rs
-│   │   ├── jwttool.rs
-│   │   └── ...
+│   │   └── gh-mozhu.rs
 │   ├── cmds/           # 子命令实现
 │   │   ├── mod.rs      # 子命令注册
 │   │   ├── basex/      # Base 编码工具
@@ -239,4 +236,3 @@ cargo doc --open        # 生成并打开文档
 - 包含代码示例（使用 `# Examples` 部分）
 - 文档测试应能编译运行
 - 保持 README.md 更新
-

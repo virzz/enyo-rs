@@ -11,7 +11,7 @@ use md5::{Digest, Md5};
 use rayon::prelude::*;
 use sha1::Sha1;
 
-use crate::CmdExecute;
+use crate::Action;
 
 #[derive(Clone, ValueEnum)]
 pub enum HashMethod {
@@ -133,7 +133,8 @@ fn hash_pow(
     }
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         let result = hash_pow(
             &self.code,

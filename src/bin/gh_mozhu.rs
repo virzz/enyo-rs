@@ -3,7 +3,7 @@
 //! Usage: gh mozhu --feat core "add new feature"
 
 use clap::Parser;
-use enyo::CmdExecute;
+use enyo::Action;
 
 // 手动导入 gh-mozhu 模块（因为目录名包含连字符）
 #[path = "../cmds/gh-mozhu/mod.rs"]

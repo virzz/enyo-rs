@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use std::fs;
 
-use crate::CmdExecute;
+use crate::Action;
 
 mod core;
 
@@ -159,7 +159,8 @@ fn get_token(token: &Option<String>, token_arg: &Option<String>) -> Result<Strin
         .ok_or_else(|| anyhow!("Token is required"))
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match &self.command {
             SubCmd::Jwtp {

@@ -4,7 +4,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use crate::CmdExecute;
+use crate::Action;
 
 mod record;
 
@@ -48,8 +48,8 @@ pub enum SubCmd {
         data: String,
     },
 }
-
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match &self.command {
             SubCmd::Generate {

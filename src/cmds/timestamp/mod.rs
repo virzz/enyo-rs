@@ -7,7 +7,7 @@ use tracing::warn;
 
 use chrono::prelude::*;
 
-use crate::CmdExecute;
+use crate::Action;
 
 #[derive(Parser)]
 #[command(name = "time")]
@@ -19,7 +19,8 @@ pub struct Cmd {
     time: Option<Vec<String>>,
 }
 
-static LAYOUTS: [&str; 4] = ["%s", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"];
+static DEFAULT_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+static LAYOUTS: [&str; 4] = ["%s", DEFAULT_FORMAT, "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"];
 
 fn _execute(t: String, fmt: Option<String>) -> Result<String, ()> {
     for l in LAYOUTS {
@@ -40,7 +41,7 @@ fn _execute(t: String, fmt: Option<String>) -> Result<String, ()> {
                 if l != "%s" {
                     format!("{}", dt.and_utc().timestamp())
                 } else {
-                    format!("{}", dt.format("%Y-%m-%d %H:%M:%S"))
+                    format!("{}", dt.format(DEFAULT_FORMAT))
                 }
             }
         };
@@ -51,10 +52,17 @@ fn _execute(t: String, fmt: Option<String>) -> Result<String, ()> {
     Err(())
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match self.time.clone() {
-            None => println!("{}", Local::now().timestamp()),
+            None => {
+                if let Some(f) = &self.format {
+                    println!("{}", Local::now().format(f.as_str()))
+                } else {
+                    println!("{}", Local::now().timestamp())
+                }
+            }
             Some(ts) => {
                 let mut result: Vec<String> = vec![];
                 for t in ts {

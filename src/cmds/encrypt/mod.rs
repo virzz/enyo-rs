@@ -11,7 +11,7 @@ use aes::cipher::{KeyIvInit, StreamCipher};
 use ctr::Ctr128BE;
 type Aes256Ctr = Ctr128BE<aes::Aes256>;
 
-use crate::CmdExecute;
+use crate::Action;
 
 mod fileinfo;
 use fileinfo::EncryptFileInfo;
@@ -181,7 +181,8 @@ pub struct Cmd {
     file: String,
 }
 
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         if self.check {
             return check_file(&self.file);

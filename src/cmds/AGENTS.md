@@ -19,10 +19,11 @@ pub struct Cmd {
 }
 ```
 
-## impl CmdExecute::execute
+## impl Action::execute
 
 ```rs
-impl CmdExecute for Cmd {
+#[async_trait::async_trait]
+impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match self.args.clone() {
             None => println!("{}", Local::now().timestamp()),
