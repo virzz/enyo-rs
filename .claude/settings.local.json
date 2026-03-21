@@ -1,0 +1,9 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "allow": ["Bash(cargo clippy:*)", "Bash(cargo fmt:*)", "Bash(cargo check:*)"]
+  }
+}
