@@ -132,31 +132,31 @@ impl Action for Cmd {
                     println!("{}", Base16::encode(&data)?);
                 }
                 SubCommand::Base16d => {
-                    core::output(&Base16::decode(&data)?, self.output_bin)?;
+                    core::print(&Base16::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base32e => {
                     println!("{}", Base32::encode(&data)?);
                 }
                 SubCommand::Base32d => {
-                    core::output(&Base32::decode(&data)?, self.output_bin)?;
+                    core::print(&Base32::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base36e => {
                     println!("{}", Base36::encode(&data)?);
                 }
                 SubCommand::Base36d => {
-                    core::output(&Base36::decode(&data)?, self.output_bin)?;
+                    core::print(&Base36::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base58e => {
                     println!("{}", Base58::encode(&data)?);
                 }
                 SubCommand::Base58d => {
-                    core::output(&Base58::decode(&data)?, self.output_bin)?;
+                    core::print(&Base58::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base62e => {
                     println!("{}", Base62::encode(&data)?);
                 }
                 SubCommand::Base62d => {
-                    core::output(&Base62::decode(&data)?, self.output_bin)?;
+                    core::print(&Base62::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base64e { url_safe } => {
                     if *url_safe {
@@ -171,19 +171,19 @@ impl Action for Cmd {
                     } else {
                         Base64Standard::decode(&data)?
                     };
-                    core::output(&result, self.output_bin)?;
+                    core::print(&result, self.output_bin)?;
                 }
                 SubCommand::Base91e => {
                     println!("{}", Base91::encode(&data)?);
                 }
                 SubCommand::Base91d => {
-                    core::output(&Base91::decode(&data)?, self.output_bin)?;
+                    core::print(&Base91::decode(&data)?, self.output_bin)?;
                 }
                 SubCommand::Base100e => {
                     println!("{}", Base100::encode(&data)?);
                 }
                 SubCommand::Base100d => {
-                    core::output(&Base100::decode(&data)?, self.output_bin)?;
+                    core::print(&Base100::decode(&data)?, self.output_bin)?;
                 }
             },
             None => {

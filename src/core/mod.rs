@@ -4,7 +4,7 @@ pub mod io;
 
 pub use action::Action;
 pub use external::external;
-pub use io::{input, inputs, output, outputs, Inputs, IoData, Outputs};
+pub use io::{input, inputs, output, print, Input, InputSource, OutputTarget};
 
 #[cfg(test)]
 mod tests {

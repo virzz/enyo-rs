@@ -8,7 +8,10 @@ mod string;
 mod url;
 mod xor;
 
-use crate::{core::input, Action};
+use crate::{
+    core::{input, Input, InputSource},
+    Action,
+};
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]
@@ -116,7 +119,13 @@ impl Action for Cmd {
         if let Some(command) = &self.command {
             let (data, data_str) = match command {
                 // Randstr 命令不需要输入数据
-                SubCmd::Randstr { .. } => (Vec::new(), String::new()),
+                SubCmd::Randstr { .. } => (
+                    Input {
+                        data: Vec::new(),
+                        source: InputSource::Arg,
+                    },
+                    String::new(),
+                ),
                 _ => {
                     let d = input(&self.inputs)?;
                     let s = String::from_utf8_lossy(&d).trim().to_string();
