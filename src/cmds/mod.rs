@@ -5,6 +5,7 @@ use anyhow::Result;
 use clap::Subcommand;
 use clap_complete::aot::Shell;
 
+pub mod agentx;
 pub mod basex;
 pub mod basic;
 pub mod encrypt;
@@ -35,6 +36,10 @@ pub enum Command {
         #[arg(help = "shell type")]
         shell: Option<Shell>,
     },
+
+    /// Download and manage agent skills
+    #[clap(alias = "ax")]
+    Agentx(agentx::Cmd),
 
     /// Base encoding/decoding tools (base16/32/36/58/62/64/91/100)
     #[clap(alias = "bx")]
@@ -98,6 +103,7 @@ impl Command {
     pub async fn invoke(&self) -> Result<()> {
         match self {
             Command::External(args) => external(args),
+            Command::Agentx(c) => c.execute().await,
             Command::Basex(c) => c.execute().await,
             Command::Basic(c) => c.execute().await,
             Command::Encrypt(c) => c.execute().await,
