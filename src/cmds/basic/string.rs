@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use rand::Rng;
+use rand::RngExt;
 use regex::Regex;
 
 use super::bin::{bin_to_hex, hex_to_bin};

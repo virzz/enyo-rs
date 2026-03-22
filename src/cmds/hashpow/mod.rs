@@ -8,6 +8,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
 
 use md5::{Digest, Md5};
+use rand::RngExt;
 use rayon::prelude::*;
 use sha1::Sha1;
 
@@ -45,7 +46,6 @@ pub struct Cmd {
 
 /// 生成随机字节
 fn random_bytes(len: usize) -> Vec<u8> {
-    use rand::Rng;
     let mut rng = rand::rng();
     (0..len).map(|_| rng.random::<u8>()).collect()
 }

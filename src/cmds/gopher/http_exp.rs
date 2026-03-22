@@ -1,8 +1,10 @@
 //! HTTP exploit via Gopher protocol
 
-use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
+
+use anyhow::Result;
+use rand::RngExt;
 
 /// Generate Gopher HTTP POST exploit payload
 pub fn gopher_http_post_exp(
@@ -32,7 +34,6 @@ pub fn gopher_http_post_exp(
 
 /// Generate a random boundary string
 fn generate_boundary() -> String {
-    use rand::Rng;
     let mut rng = rand::rng();
     let random_bytes: Vec<u8> = (0..16).map(|_| rng.random::<u8>()).collect();
     format!("----WebKitFormBoundary{}", hex::encode(random_bytes))

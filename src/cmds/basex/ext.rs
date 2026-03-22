@@ -193,8 +193,7 @@ pub async fn fuzzing(data: &[u8]) -> Result<Vec<DecodePath>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
-
+    use rand::RngExt;
     impl Decoder {
         pub fn encode(&self, data: &[u8]) -> Result<String> {
             Ok(match self {

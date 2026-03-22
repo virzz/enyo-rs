@@ -9,9 +9,9 @@ pub fn external(args: &[String]) -> Result<()> {
     }
     let output = cmd.output()?;
     if !output.status.success() {
-        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        eprint!("{}", String::from_utf8_lossy(&output.stderr));
         return Err(anyhow::anyhow!("command failed"));
     }
-    println!("{}", String::from_utf8_lossy(&output.stdout));
+    print!("{}", String::from_utf8_lossy(&output.stdout));
     Ok(())
 }
