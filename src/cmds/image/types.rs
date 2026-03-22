@@ -6,10 +6,10 @@ use image::{imageops::FilterType, ImageFormat};
 /// 支持的图片格式
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 pub enum ImageFormatType {
-    /// JPEG 格式
-    Jpg,
     /// PNG 格式
     Png,
+    /// JPEG 格式
+    Jpg,
     /// WebP 格式
     Webp,
     /// ICO 格式
@@ -23,29 +23,29 @@ pub enum ImageFormatType {
 }
 
 impl ImageFormatType {
-    /// 获取文件扩展名
-    pub fn extension(&self) -> &'static str {
-        match self {
-            ImageFormatType::Jpg => "jpg",
-            ImageFormatType::Png => "png",
-            ImageFormatType::Webp => "webp",
-            ImageFormatType::Ico => "ico",
-            ImageFormatType::Bmp => "bmp",
-            ImageFormatType::Gif => "gif",
-            ImageFormatType::Tiff => "tiff",
-        }
-    }
+    // /// 获取文件扩展名
+    // pub fn extension(&self) -> &'static str {
+    //     match self {
+    //         ImageFormatType::Jpg => "jpg",
+    //         ImageFormatType::Png => "png",
+    //         ImageFormatType::Webp => "webp",
+    //         ImageFormatType::Ico => "ico",
+    //         ImageFormatType::Bmp => "bmp",
+    //         ImageFormatType::Gif => "gif",
+    //         ImageFormatType::Tiff => "tiff",
+    //     }
+    // }
 
     /// 转换为 image crate 的 ImageFormat
-    pub fn to_image_format(&self) -> Option<ImageFormat> {
+    pub fn to_image_format(self) -> Option<ImageFormat> {
         match self {
-            ImageFormatType::Jpg => Some(ImageFormat::Jpeg),
             ImageFormatType::Png => Some(ImageFormat::Png),
-            ImageFormatType::Webp => Some(ImageFormat::WebP),
-            ImageFormatType::Ico => Some(ImageFormat::Ico),
-            ImageFormatType::Bmp => Some(ImageFormat::Bmp),
+            ImageFormatType::Jpg => Some(ImageFormat::Jpeg),
             ImageFormatType::Gif => Some(ImageFormat::Gif),
+            ImageFormatType::Webp => Some(ImageFormat::WebP),
             ImageFormatType::Tiff => Some(ImageFormat::Tiff),
+            ImageFormatType::Bmp => Some(ImageFormat::Bmp),
+            ImageFormatType::Ico => Some(ImageFormat::Ico),
         }
     }
 }
@@ -82,16 +82,16 @@ impl From<ResizeFilter> for FilterType {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_image_format_extension() {
-        assert_eq!(ImageFormatType::Jpg.extension(), "jpg");
-        assert_eq!(ImageFormatType::Png.extension(), "png");
-        assert_eq!(ImageFormatType::Webp.extension(), "webp");
-        assert_eq!(ImageFormatType::Ico.extension(), "ico");
-        assert_eq!(ImageFormatType::Bmp.extension(), "bmp");
-        assert_eq!(ImageFormatType::Gif.extension(), "gif");
-        assert_eq!(ImageFormatType::Tiff.extension(), "tiff");
-    }
+    // #[test]
+    // fn test_image_format_extension() {
+    //     assert_eq!(ImageFormatType::Jpg.extension(), "jpg");
+    //     assert_eq!(ImageFormatType::Png.extension(), "png");
+    //     assert_eq!(ImageFormatType::Webp.extension(), "webp");
+    //     assert_eq!(ImageFormatType::Ico.extension(), "ico");
+    //     assert_eq!(ImageFormatType::Bmp.extension(), "bmp");
+    //     assert_eq!(ImageFormatType::Gif.extension(), "gif");
+    //     assert_eq!(ImageFormatType::Tiff.extension(), "tiff");
+    // }
 
     #[test]
     fn test_image_format_to_image_format() {

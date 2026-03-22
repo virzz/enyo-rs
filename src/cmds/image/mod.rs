@@ -13,7 +13,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use crate::Action;
-pub use types::{ImageFormatType, ResizeFilter};
+pub use types::ResizeFilter;
 
 #[derive(Parser)]
 #[command(author, version = env!("CARGO_PKG_VERSION"), about, long_about = None)]

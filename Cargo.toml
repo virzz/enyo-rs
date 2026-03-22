@@ -6,7 +6,7 @@ version = "0.1.0"
 edition = "2021"
 default-run = "enyo"
 
-# Main binary (src/bin/*.rs are auto-discovered by Cargo)
+# Main binary
 [[bin]]
 name = "enyo"
 path = "src/main.rs"
@@ -15,6 +15,8 @@ path = "src/main.rs"
 [[bin]]
 name = "gh-mozhu"
 path = "src/bin/gh_mozhu.rs"
+required-features = ["ghext"]
+
 
 [dependencies]
 # 核心
@@ -80,6 +82,9 @@ rmcp = { version = "1.2.0", features = ["server", "macros", "auth"] }
 async-trait = "0.1.89"
 dirs = "6.0.0"
 serde_yaml = "0.9.34"
+
+[features]
+ghext = []
 
 [build-dependencies]
 clap_complete = "4.5.47"

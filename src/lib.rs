@@ -5,10 +5,10 @@ use clap_complete::{generate, Shell};
 use tracing::Level;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-pub mod cmds;
+pub(crate) mod cmds;
 pub mod core;
 
-pub use core::Action;
+use core::Action;
 
 #[derive(Parser)]
 #[command(author=crate_authors!("\n"), version= env!("CARGO_PKG_VERSION"), about, disable_help_subcommand=true, long_about = None)]

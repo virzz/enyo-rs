@@ -61,14 +61,14 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/virzz/enyo.git
-cd enyo/enyo-rs
+git clone https://github.com/virzz/enyo-rs.git
+cd enyo-rs
 
 # Build release version
 cargo build --release
 
 # Install to ~/.cargo/bin
-cargo install --path .
+cargo install --path . --bin enyo
 ```
 
 ### Via Homebrew (macOS)
@@ -277,18 +277,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 👤 Author
-
-**Mozhu** (陌竹)
-
-- Email: mozhu233@outlook.com
-- GitHub: 
-  - [@virzz](https://github.com/virzz)
-  - [@mozhu1024](https://github.com/mozhu1024)
-
----
-
 <p align="center">
   <i>Named after Enyo (Ἐνυώ) - the Greek goddess of war and destruction</i>
 </p>
-
