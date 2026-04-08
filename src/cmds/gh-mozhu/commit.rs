@@ -158,7 +158,7 @@ impl Action for Cmd {
                     if self.hide_icon {
                         header.push_str(&format!("{}({})", ct.name(), scope));
                     } else {
-                        header.push_str(&format!("{}{}({})", ct.icon(), ct.name(), scope));
+                        header.push_str(&format!("{} {}({})", ct.icon(), ct.name(), scope));
                     }
                 }
             }
