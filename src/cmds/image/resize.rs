@@ -70,7 +70,10 @@ pub fn resize_image(
                 .unwrap_or_default()
                 .to_str()
                 .unwrap_or("png");
-            format!("{}_{}x{}.{}", stem, target_width, target_height, ext)
+            input_path
+                .with_file_name(format!("{stem}_{target_width}x{target_height}.{ext}"))
+                .to_string_lossy()
+                .to_string()
         }
     };
 
@@ -89,11 +92,7 @@ mod tests {
 
     fn create_test_image(path: &str, width: u32, height: u32) -> Result<()> {
         let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(width, height, |x, y| {
-            Rgb([
-                (x % 256) as u8,
-                (y % 256) as u8,
-                ((x + y) % 256) as u8,
-            ])
+            Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
         });
         img.save(path)?;
         Ok(())
@@ -127,6 +126,7 @@ mod tests {
     fn test_resize_by_scale() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let input_path = temp_dir.path().join("test.png");
+        let output_path = temp_dir.path().join("test_100x50.png");
 
         create_test_image(input_path.to_str().unwrap(), 200, 100)?;
 
@@ -142,6 +142,8 @@ mod tests {
 
         assert!(result.contains("缩放完成"));
         assert!(result.contains("100x50"));
+        assert!(result.contains(output_path.to_str().unwrap()));
+        assert!(output_path.exists());
         Ok(())
     }
 
@@ -149,6 +151,7 @@ mod tests {
     fn test_resize_with_both_dimensions() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let input_path = temp_dir.path().join("test.png");
+        let output_path = temp_dir.path().join("test_100x100.png");
 
         create_test_image(input_path.to_str().unwrap(), 200, 100)?;
 
@@ -164,6 +167,8 @@ mod tests {
 
         assert!(result.contains("缩放完成"));
         assert!(result.contains("100x100"));
+        assert!(result.contains(output_path.to_str().unwrap()));
+        assert!(output_path.exists());
         Ok(())
     }
 
@@ -171,6 +176,7 @@ mod tests {
     fn test_resize_keep_aspect_ratio() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let input_path = temp_dir.path().join("test.png");
+        let output_path = temp_dir.path().join("test_100x50.png");
 
         create_test_image(input_path.to_str().unwrap(), 200, 100)?;
 
@@ -187,6 +193,8 @@ mod tests {
         assert!(result.contains("缩放完成"));
         // 保持宽高比，应该是 100x50
         assert!(result.contains("100x50"));
+        assert!(result.contains(output_path.to_str().unwrap()));
+        assert!(output_path.exists());
         Ok(())
     }
 

@@ -23,7 +23,7 @@ pub mod terminal;
 pub mod timestamp;
 pub mod wechat;
 
-use crate::{core::external,Action};
+use crate::{core::external, Action};
 
 #[derive(Subcommand)]
 pub enum Command {

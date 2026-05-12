@@ -35,12 +35,10 @@ pub fn generate_icon(
         Some(path) => path.to_string(),
         None => {
             let input_path = Path::new(input);
-            let stem = input_path
-                .file_stem()
-                .unwrap_or_default()
-                .to_str()
-                .unwrap_or("icon");
-            format!("{}.ico", stem)
+            input_path
+                .with_extension("ico")
+                .to_string_lossy()
+                .to_string()
         }
     };
 
@@ -168,6 +166,7 @@ mod tests {
     fn test_generate_icon_default_output_name() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let input_path = temp_dir.path().join("myicon.png");
+        let output_path = temp_dir.path().join("myicon.ico");
 
         create_test_image(input_path.to_str().unwrap(), 64, 64)?;
 
@@ -180,7 +179,8 @@ mod tests {
         )?;
 
         assert!(result.contains("ICO 生成完成"));
-        assert!(result.contains("myicon.ico"));
+        assert!(result.contains(output_path.to_str().unwrap()));
+        assert!(output_path.exists());
         Ok(())
     }
 }

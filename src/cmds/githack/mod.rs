@@ -73,10 +73,7 @@ impl Action for Cmd {
 fn parse_url(target_url: &str) -> Result<(String, PathBuf)> {
     let url = url::Url::parse(target_url)?;
     let host = url.host_str().unwrap_or("unknown");
-    let port_part = url
-        .port()
-        .map(|p| format!("_{p}"))
-        .unwrap_or_default();
+    let port_part = url.port().map(|p| format!("_{p}")).unwrap_or_default();
     let path_part = url
         .path()
         .trim_start_matches('/')
@@ -249,11 +246,7 @@ fn build_object_tasks(
 }
 
 /// Fetch git objects from all log files
-async fn fetch_log_objects(
-    downloader: &Downloader,
-    base_url: &str,
-    temp_dir: &Path,
-) -> Result<()> {
+async fn fetch_log_objects(downloader: &Downloader, base_url: &str, temp_dir: &Path) -> Result<()> {
     let mut hashes = HashSet::new();
 
     // Collect from HEAD log
@@ -410,11 +403,7 @@ async fn fetch_index_objects(
 }
 
 /// Fetch pack files listed in .git/objects/info/packs
-async fn fetch_pack_files(
-    downloader: &Downloader,
-    base_url: &str,
-    temp_dir: &Path,
-) -> Result<()> {
+async fn fetch_pack_files(downloader: &Downloader, base_url: &str, temp_dir: &Path) -> Result<()> {
     let packs_path = temp_dir.join(".git/objects/info/packs");
     let content = match fs::read_to_string(&packs_path) {
         Ok(c) => c,
@@ -626,6 +615,7 @@ mod tests {
     fn init_git_repo(repo_dir: &Path) -> Result<()> {
         let run = |args: &[&str]| -> Result<()> {
             let output = Command::new("git")
+                .args(["-c", "commit.gpgsign=false"])
                 .args(args)
                 .current_dir(repo_dir)
                 .env("GIT_AUTHOR_NAME", "Test")
@@ -704,17 +694,14 @@ mod tests {
                     let file_path = root.join(path);
                     let response = if file_path.is_file() {
                         match fs::read(&file_path) {
-                            Ok(data) => format!(
-                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n",
-                                data.len()
-                            )
-                            .into_bytes()
-                            .into_iter()
-                            .chain(data)
-                            .collect::<Vec<u8>>(),
-                            Err(_) => {
-                                b"HTTP/1.1 500 Internal Server Error\r\n\r\n".to_vec()
+                            Ok(data) => {
+                                format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n", data.len())
+                                    .into_bytes()
+                                    .into_iter()
+                                    .chain(data)
+                                    .collect::<Vec<u8>>()
                             }
+                            Err(_) => b"HTTP/1.1 500 Internal Server Error\r\n\r\n".to_vec(),
                         }
                     } else {
                         b"HTTP/1.1 404 Not Found\r\n\r\n".to_vec()
@@ -766,10 +753,7 @@ mod tests {
             &repo_dir.path().join(".git/logs/refs/stash"),
             &mut stash_hashes,
         );
-        assert!(
-            !stash_hashes.is_empty(),
-            "Should have stash hashes"
-        );
+        assert!(!stash_hashes.is_empty(), "Should have stash hashes");
     }
 
     #[test]
@@ -788,8 +772,16 @@ mod tests {
         init_git_repo(repo_dir.path()).unwrap();
 
         // 2. Start HTTP server serving the repo directory
-        let (addr, server_handle) =
-            start_file_server(repo_dir.path().to_path_buf()).await.unwrap();
+        let (addr, server_handle) = match start_file_server(repo_dir.path().to_path_buf()).await {
+            Ok(server) => server,
+            Err(e)
+                if e.downcast_ref::<std::io::Error>()
+                    .is_some_and(|e| e.kind() == std::io::ErrorKind::PermissionDenied) =>
+            {
+                return
+            }
+            Err(e) => panic!("failed to start test file server: {e}"),
+        };
 
         // 3. Run git_hack in a temp working directory
         let work_dir = TempDir::new().unwrap();
@@ -809,9 +801,7 @@ mod tests {
         assert!(result.is_ok(), "git_hack failed: {:?}", result.err());
 
         // The output directory is derived from URL: 127_0_0_1_<port>
-        let output_dir = work_dir
-            .path()
-            .join(format!("127_0_0_1_{}", addr.port()));
+        let output_dir = work_dir.path().join(format!("127_0_0_1_{}", addr.port()));
 
         // Verify .git directory was fetched
         assert!(

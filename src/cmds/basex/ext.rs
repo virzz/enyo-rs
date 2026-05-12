@@ -294,10 +294,9 @@ mod tests {
         println!("Encoded: {encoded}");
         let result = fuzzing(encoded.as_bytes()).await.unwrap();
         for r in result {
-            if r.output == original_text.as_bytes() {
-                println!("Match: {}", String::from_utf8_lossy(&r.output));
-                return;
-            } else if String::from_utf8_lossy(&r.output) == original_text {
+            if r.output == original_text.as_bytes()
+                || String::from_utf8_lossy(&r.output) == original_text
+            {
                 println!("Match: {}", String::from_utf8_lossy(&r.output));
                 return;
             }

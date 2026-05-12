@@ -120,11 +120,7 @@ mod tests {
 
     fn create_test_image(path: &str) -> Result<()> {
         let img: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(100, 100, |x, y| {
-            Rgb([
-                (x % 256) as u8,
-                (y % 256) as u8,
-                ((x + y) % 256) as u8,
-            ])
+            Rgb([(x % 256) as u8, (y % 256) as u8, ((x + y) % 256) as u8])
         });
         img.save(path)?;
         Ok(())

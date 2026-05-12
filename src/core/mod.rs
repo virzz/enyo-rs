@@ -40,7 +40,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_action_command() {
-        let args = vec!["enyo", "test", "-i", "test"];
+        let args = vec!["enyo", "-i", "test"];
         let action_cmd = TestAction::parse_from(args);
         let result = action_cmd.execute().await;
         assert!(result.is_ok());
