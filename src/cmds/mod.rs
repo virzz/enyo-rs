@@ -19,6 +19,7 @@ pub mod jwttool;
 pub mod parser;
 pub mod qrcode;
 pub mod sitemap;
+pub mod terminal;
 pub mod timestamp;
 pub mod wechat;
 
@@ -90,6 +91,10 @@ pub enum Command {
     #[clap(alias = "sm")]
     Sitemap(sitemap::Cmd),
 
+    /// Terminal environment helpers
+    #[clap(alias = "term")]
+    Terminal(terminal::Cmd),
+
     /// Print or parse timestamps
     #[clap(alias = "ts")]
     Timestamp(timestamp::Cmd),
@@ -117,6 +122,7 @@ impl Command {
             Command::Parser(c) => c.execute().await,
             Command::Qrcode(c) => c.execute().await,
             Command::Sitemap(c) => c.execute().await,
+            Command::Terminal(c) => c.execute().await,
             Command::Timestamp(c) => c.execute().await,
             Command::Wechat(c) => c.execute().await,
             _ => Err(anyhow::anyhow!("Unknown command")),
