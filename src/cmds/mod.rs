@@ -21,6 +21,7 @@ pub mod qrcode;
 pub mod sitemap;
 pub mod terminal;
 pub mod timestamp;
+pub mod transform;
 pub mod wechat;
 
 use crate::{core::external, Action};
@@ -99,6 +100,10 @@ pub enum Command {
     #[clap(alias = "ts")]
     Timestamp(timestamp::Cmd),
 
+    /// Transform data between JSON, YAML, and TOML
+    #[clap(alias = "tf")]
+    Transform(transform::Cmd),
+
     /// Decrypt Wechat DB files
     #[clap(alias = "vx")]
     Wechat(wechat::Cmd),
@@ -124,6 +129,7 @@ impl Command {
             Command::Sitemap(c) => c.execute().await,
             Command::Terminal(c) => c.execute().await,
             Command::Timestamp(c) => c.execute().await,
+            Command::Transform(c) => c.execute().await,
             Command::Wechat(c) => c.execute().await,
             _ => Err(anyhow::anyhow!("Unknown command")),
         }
