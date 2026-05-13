@@ -1,7 +1,12 @@
 //! @alias: term
 //! @about: Terminal environment helpers
 
-use std::{collections::HashSet, env, process::Command as ProcessCommand};
+use std::{
+    collections::HashSet,
+    env, fs,
+    io::{self, Read as _, Write as _},
+    process::Command as ProcessCommand,
+};
 
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
@@ -26,13 +31,24 @@ enum SubCmd {
     },
 
     /// Copy an ssh-agent public key to a remote authorized_keys file
-    #[clap(alias = "copy-id", alias = "ssh-copy-id")]
+    #[clap(alias = "copy-id")]
     SshCopyId {
         /// Case-insensitive keyword used to select a key from ssh-add -L.
         name: Option<String>,
 
         /// Remote ssh host.
         host: Option<String>,
+    },
+
+    /// Fan out piped stdout/stderr to multiple files or streams
+    Pipe {
+        /// Stdout targets. Use "-" for stdout.
+        #[arg(short = 'o', long = "output")]
+        stdout: Vec<String>,
+
+        /// Stderr targets. Use "-" for stderr.
+        #[arg(short = 'e', long = "error")]
+        stderr: Vec<String>,
     },
 }
 
@@ -139,10 +155,60 @@ fn copy_ssh_key(name: &str, host: &str, keys: &str) -> Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum PipeStream {
+    Stdout,
+    Stderr,
+}
+
+fn write_pipe_targets(data: &[u8], targets: &[String], stream: PipeStream) -> Result<()> {
+    for target in targets {
+        if target == "-" {
+            match stream {
+                PipeStream::Stdout => io::stdout().write_all(data)?,
+                PipeStream::Stderr => io::stderr().write_all(data)?,
+            }
+        } else {
+            fs::write(target, data)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn read_stdin() -> Result<Vec<u8>> {
+    let mut data = Vec::new();
+    io::stdin().read_to_end(&mut data)?;
+    Ok(data)
+}
+
+fn pipe_data(data: &[u8], stdout: &[String], stderr: &[String]) -> Result<()> {
+    if stdout.is_empty() && !stderr.is_empty() {
+        return write_pipe_targets(data, stderr, PipeStream::Stderr);
+    }
+
+    let stdout_targets = if stdout.is_empty() {
+        vec!["-".to_string()]
+    } else {
+        stdout.to_vec()
+    };
+
+    write_pipe_targets(data, &stdout_targets, PipeStream::Stdout)?;
+    if !stderr.is_empty() {
+        write_pipe_targets(&[], stderr, PipeStream::Stderr)?;
+    }
+
+    Ok(())
+}
+
 #[async_trait::async_trait]
 impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
         match &self.command {
+            Some(SubCmd::Pipe { stdout, stderr }) => {
+                let data = read_stdin()?;
+                pipe_data(&data, stdout, stderr)?;
+            }
             Some(SubCmd::SshCopyId { name, host }) => {
                 let keys = ssh_add_list()?;
                 match (name, host) {
@@ -207,5 +273,52 @@ mod tests {
             build_authorized_keys_script(key),
             "mkdir -p ~/.ssh;chmod 755 ~/.ssh;[ -f ~/.ssh/authorized_keys ] || touch ~/.ssh/authorized_keys;grep -q 'AAAA1111' ~/.ssh/authorized_keys || printf '\\n%s\\n' 'ssh-ed25519 AAAA1111 Work-Mac' >> ~/.ssh/authorized_keys;chmod 600 ~/.ssh/authorized_keys;"
         );
+    }
+
+    #[test]
+    fn pipe_writes_stdout_to_multiple_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let out1 = dir.path().join("out1.log");
+        let out2 = dir.path().join("out2.log");
+
+        write_pipe_targets(
+            b"hello\n",
+            &[
+                out1.to_string_lossy().to_string(),
+                out2.to_string_lossy().to_string(),
+            ],
+            PipeStream::Stdout,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(out1).unwrap(), "hello\n");
+        assert_eq!(std::fs::read_to_string(out2).unwrap(), "hello\n");
+    }
+
+    #[test]
+    fn pipe_writes_stderr_targets() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let err = dir.path().join("err.log");
+
+        write_pipe_targets(
+            b"error\n",
+            &[err.to_string_lossy().to_string()],
+            PipeStream::Stderr,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read_to_string(err).unwrap(), "error\n");
+    }
+
+    #[test]
+    fn pipe_can_treat_input_as_stderr_when_only_error_targets_exist() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let err = dir.path().join("err.log");
+
+        let stdout = Vec::<String>::new();
+        let stderr = vec![err.to_string_lossy().to_string()];
+        pipe_data(b"error\n", &stdout, &stderr).unwrap();
+
+        assert_eq!(std::fs::read_to_string(err).unwrap(), "error\n");
     }
 }
