@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Agent when working with code in this repository.
 
 ## Project Overview
 
@@ -30,6 +30,7 @@ make local-install           # Install locally
 ### Core Trait
 
 All commands implement `Action` trait (`src/core/action.rs`):
+
 ```rust
 #[async_trait]
 pub trait Action: Send + Sync {
