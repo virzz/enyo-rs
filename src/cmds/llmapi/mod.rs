@@ -18,6 +18,8 @@ use crate::Action;
 
 use config::{Config, Provider};
 
+const DEFAULT_LOG_TARGET: &str = "-";
+
 #[derive(Debug, Parser)]
 #[command(name = "llmapi")]
 pub struct Cmd {
@@ -40,6 +42,10 @@ pub struct Cmd {
     /// Upstream API key. Overrides client request keys.
     #[arg(long)]
     api_key: Option<String>,
+
+    /// Log target. Use "-" for stdout.
+    #[arg(long = "log", default_value = DEFAULT_LOG_TARGET)]
+    log: String,
 }
 
 impl Cmd {
@@ -80,6 +86,7 @@ impl Cmd {
 #[async_trait::async_trait]
 impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
+        log::init(&self.log).with_context(|| format!("open log target {}", self.log))?;
         let config = self.load_config()?;
         let addr: SocketAddr = config
             .server
@@ -124,6 +131,7 @@ api_key = "sk-file"
             base_url: Some("https://api.openai.com/".to_string()),
             provider: Some(Provider::OpenAiResponses),
             api_key: Some("sk-cli".to_string()),
+            log: DEFAULT_LOG_TARGET.to_string(),
         };
 
         let config = cmd.load_config().unwrap();
@@ -132,5 +140,19 @@ api_key = "sk-file"
         assert_eq!(config.base_url, "https://api.openai.com");
         assert_eq!(config.provider, Provider::OpenAiResponses);
         assert_eq!(config.api_key.as_deref(), Some("sk-cli"));
+    }
+
+    #[test]
+    fn log_defaults_to_stdout() {
+        let cmd = Cmd::parse_from(["llmapi"]);
+
+        assert_eq!(cmd.log, "-");
+    }
+
+    #[test]
+    fn log_accepts_file_path() {
+        let cmd = Cmd::parse_from(["llmapi", "--log", "/tmp/llmapi.log"]);
+
+        assert_eq!(cmd.log, "/tmp/llmapi.log");
     }
 }

@@ -90,7 +90,7 @@ pub async fn forward_raw(
                 format!(
                     "POST {} {}",
                     log::redact_url(upstream.url().as_str()),
-                    upstream.status().to_string()
+                    upstream.status()
                 ),
             );
             raw_upstream_response(upstream)
@@ -196,7 +196,7 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
         format!(
             "POST {} {}",
             log::redact_url(upstream_response.url().as_str()),
-            upstream_response.status().to_string()
+            upstream_response.status()
         ),
     );
     if forward.upstream_raw {

@@ -1,3 +1,12 @@
+use std::{
+    fs::{File, OpenOptions},
+    io::{self, Write},
+    path::Path,
+    sync::{Mutex, OnceLock},
+};
+
+static LOGGER: OnceLock<Mutex<Box<dyn Write + Send>>> = OnceLock::new();
+
 #[derive(Debug, Clone, Copy)]
 pub enum LogEvent {
     ServerListening,
@@ -10,7 +19,31 @@ pub enum LogEvent {
 }
 
 pub fn emit(event: LogEvent, message: impl AsRef<str>) {
-    println!("[llmapi] {:?}: {}", event, message.as_ref());
+    let line = format!("[llmapi] {:?}: {}\n", event, message.as_ref());
+    let mut writer = LOGGER
+        .get_or_init(|| Mutex::new(Box::new(io::stdout()) as Box<dyn Write + Send>))
+        .lock()
+        .unwrap();
+    let _ = writer.write_all(line.as_bytes());
+    let _ = writer.flush();
+}
+
+pub fn init(target: &str) -> io::Result<()> {
+    let writer: Box<dyn Write + Send> = if target == "-" {
+        Box::new(io::stdout())
+    } else {
+        Box::new(log_file(target)?)
+    };
+    let mut current = LOGGER
+        .get_or_init(|| Mutex::new(Box::new(io::stdout()) as Box<dyn Write + Send>))
+        .lock()
+        .unwrap();
+    *current = writer;
+    Ok(())
+}
+
+fn log_file(path: impl AsRef<Path>) -> io::Result<File> {
+    OpenOptions::new().create(true).append(true).open(path)
 }
 
 pub fn redact_key(key: &str) -> String {
@@ -77,5 +110,18 @@ mod tests {
             request_line("POST", &uri),
             "POST /v1/chat/completions?key=sk-que...&mode=test"
         );
+    }
+
+    #[test]
+    fn init_writes_logs_to_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("llmapi.log");
+
+        init(path.to_str().unwrap()).unwrap();
+        emit(LogEvent::RequestReceived, "POST /v1/responses");
+        init("-").unwrap();
+
+        let body = std::fs::read_to_string(path).unwrap();
+        assert!(body.contains("[llmapi] RequestReceived: POST /v1/responses"));
     }
 }
