@@ -2,10 +2,8 @@
 pub enum LogEvent {
     ServerListening,
     RequestReceived,
-    RouteDetected,
     TransparentProxyUsed,
     AdapterUsed,
-    UpstreamRequestStarted,
     UpstreamResponseReceived,
     StreamEventConversionWarning,
     UpstreamError,

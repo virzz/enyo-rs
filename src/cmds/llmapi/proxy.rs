@@ -42,11 +42,6 @@ pub async fn handle(
         return StatusCode::NOT_FOUND.into_response();
     };
     let (upstream, path) = upstream_for(state.config.provider, &input);
-    log::emit(
-        LogEvent::RouteDetected,
-        format!("{input:?} -> {upstream:?}"),
-    );
-
     let body = match to_bytes(request.into_body(), usize::MAX).await {
         Ok(body) => body,
         Err(err) => {
@@ -92,7 +87,11 @@ pub async fn forward_raw(
         Ok(upstream) => {
             log::emit(
                 LogEvent::UpstreamResponseReceived,
-                upstream.status().to_string(),
+                format!(
+                    "POST {} {}",
+                    log::redact_url(upstream.url().as_str()),
+                    upstream.status().to_string()
+                ),
             );
             raw_upstream_response(upstream)
         }
@@ -120,11 +119,6 @@ async fn send_upstream_request(
         &mut upstream_headers,
         state.config.api_key.as_deref(),
         extracted.as_deref(),
-    );
-
-    log::emit(
-        LogEvent::UpstreamRequestStarted,
-        format!("POST {}", log::redact_url(url)),
     );
     state
         .client
@@ -199,7 +193,11 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
     };
     log::emit(
         LogEvent::UpstreamResponseReceived,
-        upstream_response.status().to_string(),
+        format!(
+            "POST {} {}",
+            log::redact_url(upstream_response.url().as_str()),
+            upstream_response.status().to_string()
+        ),
     );
     if forward.upstream_raw {
         return raw_upstream_response(upstream_response);
