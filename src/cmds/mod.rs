@@ -16,6 +16,7 @@ pub mod hash;
 pub mod hashpow;
 pub mod image;
 pub mod jwttool;
+pub mod llmapi;
 pub mod parser;
 pub mod qrcode;
 pub mod sitemap;
@@ -81,6 +82,9 @@ pub enum Command {
     #[clap(alias = "jwt")]
     Jwttool(jwttool::Cmd),
 
+    /// LLM API proxy
+    Llmapi(llmapi::Cmd),
+
     /// Parse various file formats (DS_Store, /proc/net)
     Parser(parser::Cmd),
 
@@ -124,6 +128,7 @@ impl Command {
             Command::Hashpow(c) => c.execute().await,
             Command::Image(c) => c.execute().await,
             Command::Jwttool(c) => c.execute().await,
+            Command::Llmapi(c) => c.execute().await,
             Command::Parser(c) => c.execute().await,
             Command::Qrcode(c) => c.execute().await,
             Command::Sitemap(c) => c.execute().await,
