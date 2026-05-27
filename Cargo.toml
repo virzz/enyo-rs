@@ -2,7 +2,7 @@
 authors = ["Mozhu <mozhu233@outlook.com>"]
 description = "The Cyber Swiss Army Knife for terminal"
 name = "enyo"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 default-run = "enyo"
 
