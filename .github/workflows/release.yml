@@ -37,16 +37,16 @@ jobs:
             artifact: enyo-darwin-aarch64
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v3
         with:
           prefix-key: ${{ matrix.platform.target }}
           cache-targets: true
 
       - name: Build binary
-        uses: houseabsolute/actions-rust-cross@v1
+        uses: houseabsolute/actions-rust-cross@v1.0.7
         with:
           command: build
           target: ${{ matrix.platform.target }}
@@ -68,7 +68,7 @@ jobs:
           cd dist && 7z a -tzip ${{ matrix.platform.artifact }}.zip enyo.exe
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.platform.artifact }}
           path: dist/${{ matrix.platform.artifact }}.*
@@ -86,7 +86,7 @@ jobs:
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -94,7 +94,7 @@ jobs:
         run: find artifacts -type f
 
       - name: Create Release and Upload Assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.9.1
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
