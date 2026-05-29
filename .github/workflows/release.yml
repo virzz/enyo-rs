@@ -104,3 +104,27 @@ jobs:
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
+
+  update-homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Get version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger homebrew-enyo update
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh api repos/virzz/homebrew-enyo/dispatches \
+            -f event_type=update-formula \
+            -f "client_payload[version]=${VERSION}"
