@@ -1,7 +1,6 @@
 use axum::{
     body::{to_bytes, Body},
-    http::{header, HeaderMap, Response, StatusCode},
-    response::IntoResponse,
+    http::{header, HeaderMap, Method, Response, StatusCode},
 };
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -38,10 +37,8 @@ pub async fn handle(
 ) -> Response<Body> {
     let upstream_raw = wants_upstream_raw(request.uri(), &headers);
     let query = request.uri().query().map(ToString::to_string);
-    let Some(input) = detect_input(request.uri().path()) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let (upstream, path) = upstream_for(state.config.provider, &input);
+    let method = request.method().clone();
+    let request_path = request.uri().path().to_string();
     let body = match to_bytes(request.into_body(), usize::MAX).await {
         Ok(body) => body,
         Err(err) => {
@@ -52,11 +49,24 @@ pub async fn handle(
             );
         }
     };
+    let Some(input) = detect_input(&request_path) else {
+        log::emit(LogEvent::TransparentProxyUsed, &request_path);
+        return forward_raw(
+            state,
+            &headers,
+            method,
+            query.as_deref(),
+            &request_path,
+            body,
+        )
+        .await;
+    };
+    let (upstream, path) = upstream_for(state.config.provider, &input);
 
     if is_transparent(&input, &upstream) {
         let path = transparent_path(&input, &path);
         log::emit(LogEvent::TransparentProxyUsed, &path);
-        return forward_raw(state, &headers, query.as_deref(), &path, body).await;
+        return forward_raw(state, &headers, method, query.as_deref(), &path, body).await;
     }
 
     log::emit(LogEvent::AdapterUsed, format!("{input:?} -> {upstream:?}"));
@@ -76,19 +86,22 @@ pub async fn handle(
 pub async fn forward_raw(
     state: AppState,
     headers: &HeaderMap,
+    method: Method,
     query: Option<&str>,
     path: &str,
     body: Bytes,
 ) -> Response<Body> {
-    let url = format!("{}{}", state.config.base_url, path);
-    let result = send_upstream_request(state, headers, query, &url, body).await;
+    let url = upstream_url(&state.config.base_url, path, query);
+    let upstream_method = method.as_str().to_string();
+    let result = send_upstream_request(state, headers, method, &url, body).await;
 
     match result {
         Ok(upstream) => {
             log::emit(
                 LogEvent::UpstreamResponseReceived,
                 format!(
-                    "POST {} {}",
+                    "{} {} {}",
+                    upstream_method,
                     log::redact_url(upstream.url().as_str()),
                     upstream.status()
                 ),
@@ -109,11 +122,11 @@ pub async fn forward_raw(
 async fn send_upstream_request(
     state: AppState,
     headers: &HeaderMap,
-    query: Option<&str>,
+    method: Method,
     url: &str,
     body: Bytes,
 ) -> Result<reqwest::Response, reqwest::Error> {
-    let extracted = auth::extract_api_key(headers, query);
+    let extracted = auth::extract_api_key(headers, None);
     let mut upstream_headers = HeaderMap::new();
     auth::apply_api_key(
         &mut upstream_headers,
@@ -122,7 +135,7 @@ async fn send_upstream_request(
     );
     state
         .client
-        .post(url)
+        .request(method, url)
         .headers(upstream_headers)
         .header(header::CONTENT_TYPE, "application/json")
         .body(body)
@@ -171,11 +184,11 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
     };
 
     let path = materialize_path_for_request(forward.path, forward.upstream, &llm_request);
-    let url = format!("{}{}", forward.state.config.base_url, path);
+    let url = upstream_url(&forward.state.config.base_url, &path, forward.query);
     let upstream_response = match send_upstream_request(
         forward.state.clone(),
         forward.headers,
-        forward.query,
+        Method::POST,
         &url,
         Bytes::from(serde_json::to_vec(&upstream_json).unwrap()),
     )
@@ -227,6 +240,13 @@ fn llm_to_upstream(upstream: UpstreamFormat, request: &LLMRequest) -> Result<Val
 
 fn materialize_path(path: &str, model: &str) -> String {
     path.replace("{model}", model)
+}
+
+fn upstream_url(base_url: &str, path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(query) => format!("{base_url}{path}?{query}"),
+        None => format!("{base_url}{path}"),
+    }
 }
 
 fn materialize_path_for_request(
