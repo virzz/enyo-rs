@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build:
@@ -14,11 +14,12 @@ jobs:
       matrix:
         platform:
           - os-name: Linux-x86_64
-            runs-on: ubuntu-20.04
+            runs-on: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact: enyo-linux-x86_64
+
           - os-name: Linux-aarch64
-            runs-on: ubuntu-20.04
+            runs-on: ubuntu-latest
             target: aarch64-unknown-linux-musl
             artifact: enyo-linux-aarch64
 
@@ -46,7 +47,7 @@ jobs:
         with:
           command: build
           target: ${{ matrix.platform.target }}
-          args: '--locked --release'
+          args: "--locked --release"
           strip: true
 
       - name: Prepare artifact (Unix)
