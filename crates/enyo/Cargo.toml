@@ -1,0 +1,40 @@
+[package]
+name = "enyo"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "The Cyber Swiss Army Knife for terminal"
+default-run = "enyo"
+
+[[bin]]
+name = "enyo"
+path = "src/main.rs"
+
+[dependencies]
+enyo-core.workspace = true
+enyo-cmd-agentx.workspace = true
+enyo-cmd-basex.workspace = true
+enyo-cmd-basic.workspace = true
+enyo-cmd-encrypt.workspace = true
+enyo-cmd-fastcgi.workspace = true
+enyo-cmd-githack.workspace = true
+enyo-cmd-gopher.workspace = true
+enyo-cmd-hash.workspace = true
+enyo-cmd-hashpow.workspace = true
+enyo-cmd-image.workspace = true
+enyo-cmd-jwttool.workspace = true
+enyo-cmd-llmapi.workspace = true
+enyo-cmd-parser.workspace = true
+enyo-cmd-qrcode.workspace = true
+enyo-cmd-sitemap.workspace = true
+enyo-cmd-terminal.workspace = true
+enyo-cmd-timestamp.workspace = true
+enyo-cmd-transform.workspace = true
+enyo-cmd-wechat.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

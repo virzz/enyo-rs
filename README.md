@@ -231,25 +231,21 @@ enyo completion powershell > enyo.ps1
 
 ---
 
-## 📖 Standalone Binaries
+## 📖 Workspace Crates
 
-Each command module can also be used as a standalone binary:
+The CLI and command modules are organized as a Cargo workspace:
 
 ```bash
-# Build all binaries
-cargo build --release --bins
+# Build the main CLI
+cargo build -p enyo --release
 
-# Available binaries:
-./target/release/basex
-./target/release/hash
-./target/release/jwttool
-./target/release/gopher
-./target/release/githack
-./target/release/encrypt
-./target/release/timestamp
-./target/release/qrcode
-# ... and more
+# Test all workspace members
+cargo test --workspace
 ```
+
+- `crates/enyo`: main CLI binary and command registration
+- `crates/core`: shared input/output and action traits
+- `crates/*`: one library crate per command module
 
 ---
 
