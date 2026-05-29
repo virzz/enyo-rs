@@ -940,7 +940,7 @@ dependencies = [
 
 [[package]]
 name = "enyo"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -972,7 +972,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-agentx"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1043,7 +1043,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-basex"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1114,7 +1114,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-basic"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-encrypt"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-fastcgi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-githack"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1398,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-gopher"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1470,7 +1470,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-hash"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1541,7 +1541,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-hashpow"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1612,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-image"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1683,7 +1683,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-jwttool"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1754,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-llmapi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1825,7 +1825,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-parser"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1896,7 +1896,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-qrcode"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -1967,7 +1967,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-sitemap"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -2038,7 +2038,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-terminal"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -2109,7 +2109,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-timestamp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-transform"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-cmd-wechat"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "aes",
  "anyhow",
@@ -2322,7 +2322,7 @@ dependencies = [
 
 [[package]]
 name = "enyo-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-trait",

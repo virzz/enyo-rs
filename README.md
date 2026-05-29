@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Rust-2021-orange?logo=rust" alt="Rust 2021">
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
-  <img src="https://img.shields.io/badge/Version-0.1.0-green" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.1.2-green" alt="Version">
 </p>
 
 <h1 align="center">⚔️ Enyo</h1>
