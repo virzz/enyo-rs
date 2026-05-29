@@ -149,12 +149,9 @@ fn main() {
     );
 
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
-    let workspace_dir = Path::new(&manifest_dir)
-        .parent()
-        .and_then(Path::parent)
-        .expect("workspace directory");
+    let workspace_dir = Path::new(&manifest_dir);
     let cmds_dir = workspace_dir.join("crates");
-    let mod_rs_path = Path::new(&manifest_dir).join("src/cmds.rs");
+    let mod_rs_path = workspace_dir.join("crates/enyo/src/cmds.rs");
 
     println!("cargo:rerun-if-changed={}", cmds_dir.to_string_lossy());
 

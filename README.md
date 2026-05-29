@@ -237,13 +237,13 @@ The CLI and command modules are organized as a Cargo workspace:
 
 ```bash
 # Build the main CLI
-cargo build -p enyo --release
+cargo build --release
 
 # Test all workspace members
 cargo test --workspace
 ```
 
-- `crates/enyo`: main CLI binary and command registration
+- `crates/enyo`: source directory for the root `enyo` package
 - `crates/core`: shared input/output and action traits
 - `crates/*`: one library crate per command module
 
