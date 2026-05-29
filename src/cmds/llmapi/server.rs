@@ -115,6 +115,7 @@ mod tests {
                     base_url: format!("http://{upstream_addr}"),
                     provider: Provider::OpenAiCompatible,
                     api_key: None,
+                    debug: false,
                 }),
             )
             .await

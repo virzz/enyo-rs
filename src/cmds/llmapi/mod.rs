@@ -43,6 +43,10 @@ pub struct Cmd {
     #[arg(long)]
     api_key: Option<String>,
 
+    /// Emit normalized LLM request and response logs.
+    #[arg(long)]
+    debug: bool,
+
     /// Log target. Use "-" for stdout.
     #[arg(long = "log", default_value = DEFAULT_LOG_TARGET)]
     log: String,
@@ -77,6 +81,9 @@ impl Cmd {
         }
         if let Some(api_key) = &self.api_key {
             config.api_key = Some(api_key.clone());
+        }
+        if self.debug {
+            config.debug = true;
         }
 
         Ok(config)
@@ -131,6 +138,7 @@ api_key = "sk-file"
             base_url: Some("https://api.openai.com/".to_string()),
             provider: Some(Provider::OpenAiResponses),
             api_key: Some("sk-cli".to_string()),
+            debug: true,
             log: DEFAULT_LOG_TARGET.to_string(),
         };
 
@@ -140,6 +148,7 @@ api_key = "sk-file"
         assert_eq!(config.base_url, "https://api.openai.com");
         assert_eq!(config.provider, Provider::OpenAiResponses);
         assert_eq!(config.api_key.as_deref(), Some("sk-cli"));
+        assert!(config.debug);
     }
 
     #[test]
@@ -154,5 +163,19 @@ api_key = "sk-file"
         let cmd = Cmd::parse_from(["llmapi", "--log", "/tmp/llmapi.log"]);
 
         assert_eq!(cmd.log, "/tmp/llmapi.log");
+    }
+
+    #[test]
+    fn debug_flag_defaults_to_false() {
+        let cmd = Cmd::parse_from(["llmapi"]);
+
+        assert!(!cmd.debug);
+    }
+
+    #[test]
+    fn debug_flag_can_be_enabled() {
+        let cmd = Cmd::parse_from(["llmapi", "--debug"]);
+
+        assert!(cmd.debug);
     }
 }

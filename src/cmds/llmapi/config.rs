@@ -9,6 +9,7 @@ pub struct Config {
     pub base_url: String,
     pub provider: Provider,
     pub api_key: Option<String>,
+    pub debug: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -51,6 +52,8 @@ struct RawConfig {
     base_url: String,
     provider: String,
     api_key: Option<String>,
+    #[serde(default)]
+    debug: bool,
 }
 
 impl Config {
@@ -69,6 +72,7 @@ impl Config {
             base_url: raw.base_url.trim_end_matches('/').to_string(),
             provider: Provider::from_str(&raw.provider)?,
             api_key: raw.api_key.map(expand_env).transpose()?,
+            debug: raw.debug,
         })
     }
 }
@@ -117,4 +121,48 @@ fn expand_env(value: String) -> Result<String, ConfigError> {
 
     output.push_str(rest);
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_defaults_to_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("llmapi.toml");
+        std::fs::write(
+            &path,
+            r#"
+server = "127.0.0.1:8080"
+base_url = "https://example.test"
+provider = "openai-chat"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(path).unwrap();
+
+        assert!(!config.debug);
+    }
+
+    #[test]
+    fn loads_debug_from_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("llmapi.toml");
+        std::fs::write(
+            &path,
+            r#"
+server = "127.0.0.1:8080"
+base_url = "https://example.test"
+provider = "openai-chat"
+debug = true
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load(path).unwrap();
+
+        assert!(config.debug);
+    }
 }

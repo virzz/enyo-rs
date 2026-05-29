@@ -93,7 +93,7 @@ pub async fn forward_raw(
 ) -> Response<Body> {
     let url = upstream_url(&state.config.base_url, path, query);
     let upstream_method = method.as_str().to_string();
-    let result = send_upstream_request(state, headers, method, &url, body).await;
+    let result = send_upstream_request(state, headers, method, query, &url, body).await;
 
     match result {
         Ok(upstream) => {
@@ -123,10 +123,11 @@ async fn send_upstream_request(
     state: AppState,
     headers: &HeaderMap,
     method: Method,
+    auth_query: Option<&str>,
     url: &str,
     body: Bytes,
 ) -> Result<reqwest::Response, reqwest::Error> {
-    let extracted = auth::extract_api_key(headers, None);
+    let extracted = auth::extract_api_key(headers, auth_query);
     let mut upstream_headers = HeaderMap::new();
     auth::apply_api_key(
         &mut upstream_headers,
@@ -172,6 +173,9 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
             );
         }
     };
+    if forward.state.config.debug {
+        log::emit(LogEvent::LlmRequest, log::format_json(&llm_request));
+    }
     let upstream_json = match llm_to_upstream(forward.upstream, &llm_request) {
         Ok(value) => value,
         Err(err) => {
@@ -189,6 +193,7 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
         forward.state.clone(),
         forward.headers,
         Method::POST,
+        forward.query,
         &url,
         Bytes::from(serde_json::to_vec(&upstream_json).unwrap()),
     )
@@ -215,7 +220,13 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
     if forward.upstream_raw {
         return raw_upstream_response(upstream_response);
     }
-    convert_response_back(upstream_response, forward.input, forward.upstream).await
+    convert_response_back(
+        upstream_response,
+        forward.input,
+        forward.upstream,
+        forward.state.config.debug,
+    )
+    .await
 }
 
 fn input_to_llm(input: &InputFormat, value: Value) -> Result<LLMRequest, AdapterError> {
@@ -280,6 +291,7 @@ async fn convert_response_back(
     upstream_response: reqwest::Response,
     input: &InputFormat,
     upstream: UpstreamFormat,
+    debug: bool,
 ) -> Response<Body> {
     let status = upstream_response.status();
     let content_type = upstream_response
@@ -317,6 +329,9 @@ async fn convert_response_back(
             );
         }
     };
+    if debug {
+        log::emit(LogEvent::LlmResponse, log::format_json(&llm));
+    }
     let output = match llm_to_input(input, &llm) {
         Ok(value) => value,
         Err(err) => {

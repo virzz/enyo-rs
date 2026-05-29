@@ -13,6 +13,8 @@ pub enum LogEvent {
     RequestReceived,
     TransparentProxyUsed,
     AdapterUsed,
+    LlmRequest,
+    LlmResponse,
     UpstreamResponseReceived,
     StreamEventConversionWarning,
     UpstreamError,
@@ -26,6 +28,10 @@ pub fn emit(event: LogEvent, message: impl AsRef<str>) {
         .unwrap();
     let _ = writer.write_all(line.as_bytes());
     let _ = writer.flush();
+}
+
+pub fn format_json(value: &impl serde::Serialize) -> String {
+    serde_json::to_string_pretty(value).unwrap_or_else(|err| format!("serialize debug json: {err}"))
 }
 
 pub fn init(target: &str) -> io::Result<()> {
