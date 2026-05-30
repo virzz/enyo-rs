@@ -91,7 +91,7 @@ jobs:
         run: find artifacts -type f
 
       - name: Create Release and Upload Assets
-        uses: softprops/action-gh-release@v2.9.1
+        uses: softprops/action-gh-release@v2.6.2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
