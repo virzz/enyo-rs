@@ -1,9 +1,9 @@
 //! @alias: qr
 //! @about: QR code generate and parse tools
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
-use image::{ImageBuffer, Luma, Rgb, RgbImage};
+use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 use qrcode::QrCode;
 
 use enyo_core::{core::input, Action};
@@ -141,6 +141,108 @@ fn generate_qrcode(content: &str, output: Option<&str>) -> Result<String> {
     }
 }
 
+fn render_payload(payload: &[u8], terminal: bool) -> Result<String> {
+    let text = String::from_utf8_lossy(payload).to_string();
+    if !terminal {
+        return Ok(text);
+    }
+
+    let code = QrCode::new(payload)?;
+    let qrcode = code
+        .render::<char>()
+        .quiet_zone(true)
+        .module_dimensions(2, 1)
+        .build();
+    Ok(format!("{qrcode}\n{text}"))
+}
+
+fn decode_qrcodes(img_gray: &GrayImage, terminal: bool) -> Result<(Vec<String>, Vec<String>)> {
+    let mut decoder = quircs::Quirc::default();
+    let codes = decoder.identify(
+        img_gray.width() as usize,
+        img_gray.height() as usize,
+        img_gray.as_raw(),
+    );
+
+    let mut results = Vec::new();
+    let mut errors = Vec::new();
+
+    for code in codes {
+        let code = match code {
+            Ok(code) => code,
+            Err(err) => {
+                errors.push(format!("extract failed: {err}"));
+                continue;
+            }
+        };
+
+        match code.decode() {
+            Ok(decoded) => results.push(render_payload(&decoded.payload, terminal)?),
+            Err(err) => errors.push(format!("decode failed: {err}")),
+        }
+    }
+
+    Ok((results, errors))
+}
+
+fn add_quiet_zone(img_gray: &GrayImage) -> GrayImage {
+    let border = (img_gray.width().min(img_gray.height()) / 10).max(16);
+    let mut padded = GrayImage::from_pixel(
+        img_gray.width() + border * 2,
+        img_gray.height() + border * 2,
+        Luma([255]),
+    );
+
+    for (x, y, pixel) in img_gray.enumerate_pixels() {
+        padded.put_pixel(x + border, y + border, *pixel);
+    }
+
+    padded
+}
+
+fn parse_qrcode_bytes(data: &[u8], terminal: bool) -> Result<String> {
+    let img = image::load_from_memory(data).context("failed to load QR code image")?;
+    let img_gray = img.into_luma8();
+    let (mut results, mut errors) = decode_qrcodes(&img_gray, terminal)?;
+
+    if results.is_empty() {
+        let padded = add_quiet_zone(&img_gray);
+        let (padded_results, padded_errors) = decode_qrcodes(&padded, terminal)?;
+        results = padded_results;
+        errors.extend(padded_errors);
+    }
+
+    if results.is_empty() {
+        if errors.is_empty() {
+            return Err(anyhow!("No QR code found"));
+        }
+        return Err(anyhow!("Failed to decode QR code: {}", errors.join("; ")));
+    }
+
+    Ok(results.join("\n"))
+}
+
+fn parse_qrcode(target: &str, terminal: bool) -> Result<String> {
+    let data = std::fs::read(target).with_context(|| format!("failed to read [{target}]"))?;
+    parse_qrcode_bytes(&data, terminal)
+}
+
+async fn parse_qrcode_target(target: &str, terminal: bool) -> Result<String> {
+    if target.starts_with("http://") || target.starts_with("https://") {
+        let data = reqwest::get(target)
+            .await
+            .with_context(|| format!("failed to request [{target}]"))?
+            .error_for_status()
+            .with_context(|| format!("failed to download [{target}]"))?
+            .bytes()
+            .await
+            .with_context(|| format!("failed to read response body from [{target}]"))?;
+        return parse_qrcode_bytes(&data, terminal);
+    }
+
+    parse_qrcode(target, terminal)
+}
+
 #[async_trait::async_trait]
 impl Action for Cmd {
     async fn execute(&self) -> Result<()> {
@@ -155,13 +257,9 @@ impl Action for Cmd {
                 let result = zero_one_to_qrcode(&content, *exchange, output.as_deref())?;
                 println!("{result}");
             }
-            SubCmd::Qrparse {
-                terminal: _,
-                target: _,
-            } => {
-                // QR 码解析需要更复杂的库支持，这里简化处理
-                // 实际应用中可以使用 rqrr 或其他库
-                return Err(anyhow!("QR code parsing is not yet implemented in Rust version. Please use external tools like zbarimg."));
+            SubCmd::Qrparse { terminal, target } => {
+                let result = parse_qrcode_target(target, *terminal).await?;
+                println!("{result}");
             }
             SubCmd::Qrgen { output, inputs } => {
                 let data = input(inputs)?;
@@ -204,5 +302,35 @@ mod tests {
             },
         };
         cmd.execute().await.unwrap();
+    }
+
+    #[test]
+    fn test_parse_generated_qrcode_image() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("qrcode.png");
+        let image_path = image_path.to_string_lossy();
+
+        generate_qrcode("Mozhu233", Some(&image_path)).unwrap();
+        let result = parse_qrcode(&image_path, false).unwrap();
+
+        assert_eq!(result, "Mozhu233");
+    }
+
+    #[test]
+    fn test_parse_qrcode_without_quiet_zone() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let image_path = temp_dir.path().join("qrcode-no-quiet-zone.png");
+        let image_path = image_path.to_string_lossy();
+        let image = QrCode::new(b"Mozhu233")
+            .unwrap()
+            .render::<Luma<u8>>()
+            .quiet_zone(false)
+            .module_dimensions(10, 10)
+            .build();
+
+        image.save(&*image_path).unwrap();
+        let result = parse_qrcode(&image_path, false).unwrap();
+
+        assert_eq!(result, "Mozhu233");
     }
 }

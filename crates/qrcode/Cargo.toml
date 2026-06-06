@@ -46,6 +46,7 @@ md4.workspace = true
 num-bigint.workspace = true
 pbkdf2.workspace = true
 qrcode.workspace = true
+quircs.workspace = true
 rand.workspace = true
 rayon.workspace = true
 regex.workspace = true

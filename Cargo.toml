@@ -92,6 +92,7 @@ md4 = "0.10"
 num-bigint = "0.4"
 pbkdf2 = { version = "0.12.2", features = ["sha1", "sha2"] }
 qrcode = "0.14"
+quircs = "0.10"
 rand = "0.10.0"
 rayon = "1.10"
 regex = "1.10.5"
