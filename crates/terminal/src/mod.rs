@@ -31,7 +31,7 @@ enum SubCmd {
     },
 
     /// Copy an ssh-agent public key to a remote authorized_keys file
-    #[clap(alias = "copy-id")]
+    #[clap(name = "sshkey", alias = "ssh-copy-id", alias = "copy-id")]
     SshCopyId {
         /// Case-insensitive keyword used to select a key from ssh-add -L.
         name: Option<String>,
@@ -263,6 +263,32 @@ mod tests {
             find_ssh_key(keys, "work").unwrap(),
             "ssh-ed25519 AAAA1111 Work-Mac"
         );
+    }
+
+    #[test]
+    fn sshkey_parses_as_ssh_copy_id() {
+        let cmd = Cmd::parse_from(["terminal", "sshkey", "work", "root@example.com"]);
+
+        match cmd.command {
+            Some(SubCmd::SshCopyId { name, host }) => {
+                assert_eq!(name.as_deref(), Some("work"));
+                assert_eq!(host.as_deref(), Some("root@example.com"));
+            }
+            _ => panic!("sshkey alias should parse as ssh-copy-id"),
+        }
+    }
+
+    #[test]
+    fn ssh_copy_id_alias_still_parses() {
+        let cmd = Cmd::parse_from(["terminal", "ssh-copy-id", "work"]);
+
+        match cmd.command {
+            Some(SubCmd::SshCopyId { name, host }) => {
+                assert_eq!(name.as_deref(), Some("work"));
+                assert_eq!(host, None);
+            }
+            _ => panic!("ssh-copy-id alias should parse as sshkey"),
+        }
     }
 
     #[test]
