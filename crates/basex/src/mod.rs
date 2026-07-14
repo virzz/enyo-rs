@@ -122,9 +122,14 @@ pub enum SubCommand {
     Base100d,
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.execute_async()
+    }
+}
+
+impl Cmd {
+    async fn execute_async(&self) -> Result<()> {
         let data = core::input(&self.input.clone())?;
         match &self.cmds {
             Some(cmd) => match cmd {

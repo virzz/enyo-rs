@@ -1,5 +1,4 @@
 use anyhow::Result;
-use futures::future::join_all;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -104,8 +103,8 @@ fn decodes() -> Vec<Decoder> {
     ]
 }
 
-/// 异步尝试单个解码器解码
-async fn try_decode(
+/// 尝试单个解码器解码
+fn try_decode(
     decoder: Decoder,
     data: &[u8],
     parent_path: Option<Box<DecodePath>>,
@@ -150,15 +149,11 @@ pub async fn fuzzing_path(
     if path_count.load(Ordering::Relaxed) >= MAX_PATHS {
         return Ok(Vec::new());
     }
-    // 为所有解码器创建任务
-    let mut decode_tasks = Vec::new();
-    for decoder in decoders {
-        decode_tasks.push(try_decode(*decoder, data, parent_path.clone()));
-    }
-    // 执行所有解码任务
-    let results = join_all(decode_tasks).await;
     let mut paths = Vec::new();
-    for path in results.into_iter().flatten() {
+    for path in decoders
+        .iter()
+        .filter_map(|decoder| try_decode(*decoder, data, parent_path.clone()).ok())
+    {
         // 检查是否超过路径限制
         if path_count.fetch_add(1, Ordering::Relaxed) >= MAX_PATHS {
             break;

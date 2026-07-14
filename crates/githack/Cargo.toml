@@ -12,7 +12,6 @@ enyo-core.workspace = true
 aes.workspace = true
 anyhow.workspace = true
 async-stream.workspace = true
-async-trait.workspace = true
 axum.workspace = true
 base-x.workspace = true
 base32.workspace = true

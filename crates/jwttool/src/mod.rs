@@ -159,9 +159,14 @@ fn get_token(token: &Option<String>, token_arg: &Option<String>) -> Result<Strin
         .ok_or_else(|| anyhow!("Token is required"))
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        std::future::ready(self.execute_sync())
+    }
+}
+
+impl Cmd {
+    fn execute_sync(&self) -> Result<()> {
         match &self.command {
             SubCmd::Jwtp {
                 token,

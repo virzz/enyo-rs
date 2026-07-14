@@ -35,9 +35,14 @@ pub enum SubCmd {
     },
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.execute_async()
+    }
+}
+
+impl Cmd {
+    async fn execute_async(&self) -> Result<()> {
         match &self.command {
             SubCmd::Procnet { filepath, input } => {
                 let path = filepath
@@ -59,8 +64,8 @@ impl Action for Cmd {
 #[cfg(test)]
 mod tests {
 
-    #[tokio::test]
-    async fn test_procnet() {
+    #[test]
+    fn test_procnet() {
         // 需要实际的测试文件
         // let cmd = Cmd {
         //     command: SubCmd::Procnet {

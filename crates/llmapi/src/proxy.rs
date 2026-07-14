@@ -3,7 +3,7 @@ use axum::{
     http::{header, HeaderMap, Method, Response, StatusCode},
 };
 use bytes::Bytes;
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use serde_json::Value;
 
 use super::{
@@ -83,19 +83,18 @@ pub async fn handle(
     .await
 }
 
-pub async fn forward_raw(
+pub fn forward_raw(
     state: AppState,
     headers: &HeaderMap,
     method: Method,
     query: Option<&str>,
     path: &str,
     body: Bytes,
-) -> Response<Body> {
+) -> impl std::future::Future<Output = Response<Body>> + Send {
     let url = upstream_url(&state.config.base_url, path, query);
     let upstream_method = method.as_str().to_string();
-    let result = send_upstream_request(state, headers, method, query, &url, body).await;
-
-    match result {
+    send_upstream_request(state, headers, method, query, &url, body).map(move |result| match result
+    {
         Ok(upstream) => {
             log::emit(
                 LogEvent::UpstreamResponseReceived,
@@ -116,17 +115,17 @@ pub async fn forward_raw(
                 "text/plain",
             )
         }
-    }
+    })
 }
 
-async fn send_upstream_request(
+fn send_upstream_request(
     state: AppState,
     headers: &HeaderMap,
     method: Method,
     auth_query: Option<&str>,
     url: &str,
     body: Bytes,
-) -> Result<reqwest::Response, reqwest::Error> {
+) -> impl std::future::Future<Output = Result<reqwest::Response, reqwest::Error>> + Send {
     let extracted = auth::extract_api_key(headers, auth_query);
     let mut upstream_headers = HeaderMap::new();
     auth::apply_api_key(
@@ -141,7 +140,6 @@ async fn send_upstream_request(
         .header(header::CONTENT_TYPE, "application/json")
         .body(body)
         .send()
-        .await
 }
 
 pub fn response(status: StatusCode, body: Bytes, content_type: &str) -> Response<Body> {

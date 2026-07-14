@@ -127,9 +127,14 @@ fn write_output(output: Option<&str>, data: &str) -> Result<()> {
     Ok(())
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        std::future::ready(self.execute_sync())
+    }
+}
+
+impl Cmd {
+    fn execute_sync(&self) -> Result<()> {
         let output_format = detect_output_format(self)?;
         let input = read_input(self.input.as_deref())?;
         let output = transform_data(&input, output_format, self.compact)?;

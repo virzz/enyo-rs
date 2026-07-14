@@ -62,10 +62,9 @@ pub struct Cmd {
     pub timeout: u64,
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
-        git_hack(&self.target, self.limit, self.delay, self.timeout).await
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        git_hack(&self.target, self.limit, self.delay, self.timeout)
     }
 }
 

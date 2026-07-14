@@ -90,9 +90,14 @@ impl Cmd {
     }
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.execute_async()
+    }
+}
+
+impl Cmd {
+    async fn execute_async(&self) -> Result<()> {
         log::init(&self.log).with_context(|| format!("open log target {}", self.log))?;
         let config = self.load_config()?;
         let addr: SocketAddr = config

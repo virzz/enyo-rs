@@ -1,7 +1,5 @@
-use anyhow::{Ok, Result};
-use base_x;
-
 use super::BaseX;
+use anyhow::{Ok, Result};
 
 pub struct Base36;
 

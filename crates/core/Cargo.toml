@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
-async-trait.workspace = true
 clap.workspace = true
 tokio.workspace = true
 tracing.workspace = true

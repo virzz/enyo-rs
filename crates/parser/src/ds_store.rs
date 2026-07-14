@@ -112,8 +112,8 @@ pub async fn parse_ds_store(src: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
 
-    #[tokio::test]
-    async fn test_parse_ds_store_local() {
+    #[test]
+    fn test_parse_ds_store_local() {
         // 需要实际的 .DS_Store 文件进行测试
     }
 }

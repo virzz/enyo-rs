@@ -181,9 +181,14 @@ pub struct Cmd {
     file: String,
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        std::future::ready(self.execute_sync())
+    }
+}
+
+impl Cmd {
+    fn execute_sync(&self) -> Result<()> {
         if self.check {
             return check_file(&self.file);
         }

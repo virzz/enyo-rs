@@ -21,9 +21,14 @@ mod tests {
         pub input: String,
     }
 
-    #[async_trait::async_trait]
     impl Action for TestAction {
-        async fn execute(&self) -> Result<()> {
+        fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+            std::future::ready(self.execute_sync())
+        }
+    }
+
+    impl TestAction {
+        fn execute_sync(&self) -> Result<()> {
             println!("TestAction execute with input: {}", self.input);
             Ok(())
         }

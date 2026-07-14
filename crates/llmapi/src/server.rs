@@ -42,13 +42,13 @@ pub async fn serve(addr: SocketAddr, config: Config) -> Result<()> {
     Ok(())
 }
 
-async fn handler(
+fn handler(
     State(state): State<AppState>,
     method: Method,
     uri: Uri,
     headers: HeaderMap,
     body: Body,
-) -> Response<Body> {
+) -> impl std::future::Future<Output = Response<Body>> + Send {
     log::emit(
         LogEvent::RequestReceived,
         log::request_line(method.as_str(), &uri),
@@ -59,7 +59,7 @@ async fn handler(
         .body(body)
         .expect("request builder with existing uri");
 
-    proxy::handle(state, headers, request).await
+    proxy::handle(state, headers, request)
 }
 
 #[cfg(test)]

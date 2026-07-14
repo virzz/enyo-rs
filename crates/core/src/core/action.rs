@@ -1,4 +1,3 @@
-#[async_trait::async_trait]
 pub trait Action: Send + Sync {
-    async fn execute(&self) -> anyhow::Result<()>;
+    fn execute(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }

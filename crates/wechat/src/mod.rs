@@ -270,9 +270,14 @@ fn do_exec(
     Ok(())
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        std::future::ready(self.execute_sync())
+    }
+}
+
+impl Cmd {
+    fn execute_sync(&self) -> Result<()> {
         let key = self.key.clone();
         let file = self.file.clone();
         let rawkey = self.rawkey;

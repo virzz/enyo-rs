@@ -201,9 +201,14 @@ fn pipe_data(data: &[u8], stdout: &[String], stderr: &[String]) -> Result<()> {
     Ok(())
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        std::future::ready(self.execute_sync())
+    }
+}
+
+impl Cmd {
+    fn execute_sync(&self) -> Result<()> {
         match &self.command {
             Some(SubCmd::Pipe { stdout, stderr }) => {
                 let data = read_stdin()?;

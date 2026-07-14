@@ -243,9 +243,14 @@ async fn parse_qrcode_target(target: &str, terminal: bool) -> Result<String> {
     parse_qrcode(target, terminal)
 }
 
-#[async_trait::async_trait]
 impl Action for Cmd {
-    async fn execute(&self) -> Result<()> {
+    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
+        self.execute_async()
+    }
+}
+
+impl Cmd {
+    async fn execute_async(&self) -> Result<()> {
         match &self.command {
             SubCmd::Qrbs {
                 exchange,
