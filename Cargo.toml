@@ -1,11 +1,12 @@
 [package]
 name = "enyo"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
 description = "The Cyber Swiss Army Knife for terminal"
 default-run = "enyo"
 build = "crates/enyo/build.rs"
+
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 
 [lib]
 path = "crates/enyo/src/lib.rs"
@@ -15,10 +16,7 @@ name = "enyo"
 path = "crates/enyo/src/main.rs"
 
 [workspace]
-members = [
-    "crates/core",
-    "crates/*",
-]
+members = ["crates/core", "crates/*"]
 default-members = ["."]
 exclude = ["crates/enyo"]
 resolver = "2"
