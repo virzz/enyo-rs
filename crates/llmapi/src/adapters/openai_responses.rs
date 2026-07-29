@@ -13,25 +13,7 @@ impl RequestAdapter for OpenAiResponsesAdapter {
             .as_str()
             .ok_or(AdapterError::MissingField("model"))?
             .to_string();
-        let mut messages = Vec::new();
-        for item in value["input"]
-            .as_array()
-            .ok_or(AdapterError::MissingField("input"))?
-        {
-            let role = match item["role"].as_str().unwrap_or("user") {
-                "assistant" => LLMRole::Assistant,
-                "tool" => LLMRole::Tool,
-                _ => LLMRole::User,
-            };
-            let content = item["content"].as_str().unwrap_or_default().to_string();
-            messages.push(LLMMessage {
-                role,
-                content: text_content(content),
-                name: None,
-                tool_call_id: None,
-                metadata: json!({}),
-            });
-        }
+        let messages = responses_input(&value["input"])?;
         Ok(LLMRequest {
             model,
             system: value["instructions"].as_str().map(ToString::to_string),
@@ -41,7 +23,7 @@ impl RequestAdapter for OpenAiResponsesAdapter {
             top_p: value["top_p"].as_f64(),
             stop: value.get("stop").cloned(),
             stream: value["stream"].as_bool().unwrap_or(false),
-            tools: value["tools"].as_array().cloned().unwrap_or_default(),
+            tools: super::tools_from_openai_responses(&value["tools"]),
             metadata: json!({ "source": "openai_responses" }),
         })
     }
@@ -75,7 +57,7 @@ impl RequestAdapter for OpenAiResponsesAdapter {
             value["top_p"] = json!(top_p);
         }
         if !request.tools.is_empty() {
-            value["tools"] = json!(request.tools);
+            value["tools"] = json!(super::tools_to_openai_responses(&request.tools));
         }
         Ok(value)
     }
@@ -83,10 +65,14 @@ impl RequestAdapter for OpenAiResponsesAdapter {
 
 impl ResponseAdapter for OpenAiResponsesAdapter {
     fn to_llm_response(value: Value) -> Result<LLMResponse, AdapterError> {
+        let output_text = value["output_text"]
+            .as_str()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| extract_output_text(&value["output"]));
         Ok(LLMResponse {
             id: value["id"].as_str().map(ToString::to_string),
             model: value["model"].as_str().map(ToString::to_string),
-            content: text_content(value["output_text"].as_str().unwrap_or_default()),
+            content: text_content(output_text),
             finish_reason: value["status"].as_str().map(ToString::to_string),
             usage: value.get("usage").cloned(),
             metadata: json!({ "source": "openai_responses" }),
@@ -94,11 +80,23 @@ impl ResponseAdapter for OpenAiResponsesAdapter {
     }
 
     fn from_llm_response(response: &LLMResponse) -> Result<Value, AdapterError> {
+        let id = response
+            .id
+            .clone()
+            .unwrap_or_else(|| format!("resp_{}", uuid::Uuid::new_v4()));
+        let text = super::openai_chat::join_text(&response.content);
         Ok(json!({
-            "id": response.id.clone().unwrap_or_else(|| format!("resp_{}", uuid::Uuid::new_v4())),
+            "id": id,
             "object": "response",
             "model": response.model.clone().unwrap_or_default(),
-            "output_text": super::openai_chat::join_text(&response.content),
+            "output": [{
+                "id": format!("msg_{}", uuid::Uuid::new_v4()),
+                "type": "message",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": text, "annotations": []}]
+            }],
+            "output_text": text,
             "status": response.finish_reason.clone().unwrap_or_else(|| "completed".into()),
             "usage": response.usage.clone().unwrap_or_else(|| json!({}))
         }))
@@ -107,7 +105,7 @@ impl ResponseAdapter for OpenAiResponsesAdapter {
 
 impl StreamAdapter for OpenAiResponsesAdapter {
     fn parse_stream_event(event: &str) -> Result<Option<LLMStreamEvent>, AdapterError> {
-        let Some(data) = event.strip_prefix("data: ") else {
+        let Some(data) = super::sse_data(event) else {
             return Ok(None);
         };
         let value: Value =
@@ -137,6 +135,62 @@ impl StreamAdapter for OpenAiResponsesAdapter {
             _ => Ok(None),
         }
     }
+}
+
+fn responses_input(value: &Value) -> Result<Vec<LLMMessage>, AdapterError> {
+    if let Some(text) = value.as_str() {
+        return Ok(vec![message(LLMRole::User, text.to_string())]);
+    }
+    let items = value
+        .as_array()
+        .ok_or(AdapterError::MissingField("input"))?;
+    Ok(items
+        .iter()
+        .filter(|item| item["type"].as_str().unwrap_or("message") == "message")
+        .map(|item| {
+            let role = match item["role"].as_str().unwrap_or("user") {
+                "assistant" => LLMRole::Assistant,
+                "tool" => LLMRole::Tool,
+                _ => LLMRole::User,
+            };
+            message(role, extract_responses_content(&item["content"]))
+        })
+        .collect())
+}
+
+fn message(role: LLMRole, text: String) -> LLMMessage {
+    LLMMessage {
+        role,
+        content: text_content(text),
+        name: None,
+        tool_call_id: None,
+        metadata: json!({}),
+    }
+}
+
+fn extract_responses_content(value: &Value) -> String {
+    if let Some(text) = value.as_str() {
+        return text.to_string();
+    }
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|item| item["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn extract_output_text(value: &Value) -> String {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|item| item["type"].as_str() == Some("message"))
+        .flat_map(|item| item["content"].as_array().into_iter().flatten())
+        .filter_map(|content| content["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 #[cfg(test)]
@@ -174,5 +228,44 @@ mod tests {
                 text: "hello".into()
             }]
         );
+    }
+
+    #[test]
+    fn parses_string_and_content_block_inputs() {
+        let string = OpenAiResponsesAdapter::to_llm_request(json!({
+            "model": "gpt-4.1",
+            "input": "hello"
+        }))
+        .unwrap();
+        let blocks = OpenAiResponsesAdapter::to_llm_request(json!({
+            "model": "gpt-4.1",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "hello"}]
+            }]
+        }))
+        .unwrap();
+
+        assert_eq!(string.messages[0].content, text_content("hello"));
+        assert_eq!(blocks.messages[0].content, text_content("hello"));
+    }
+
+    #[test]
+    fn parses_real_responses_output_shape() {
+        let response = OpenAiResponsesAdapter::to_llm_response(json!({
+            "id": "resp_1",
+            "model": "gpt-4.1",
+            "status": "completed",
+            "output": [{
+                "type": "message",
+                "content": [{"type": "output_text", "text": "hello"}]
+            }]
+        }))
+        .unwrap();
+
+        assert_eq!(response.content, text_content("hello"));
+        let output = OpenAiResponsesAdapter::from_llm_response(&response).unwrap();
+        assert_eq!(output["output"][0]["content"][0]["text"], "hello");
     }
 }

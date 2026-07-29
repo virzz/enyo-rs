@@ -1,62 +1,85 @@
-//! @about: LLM API proxy
+//! @about: LLM API protocol conversion proxy
 
 pub mod adapters;
 pub mod auth;
 pub mod config;
-pub mod log;
 pub mod model;
 pub mod protocol;
 pub mod proxy;
+mod redact;
 pub mod server;
 
 use std::{net::SocketAddr, path::PathBuf};
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 use enyo_core::Action;
 
-use config::{Config, Provider};
-
-const DEFAULT_LOG_TARGET: &str = "-";
+use config::{Config, Provider, ProviderConfig};
 
 #[derive(Debug, Parser)]
 #[command(name = "llmapi")]
 pub struct Cmd {
     /// Config file path
-    #[arg(short = 'c', long = "config")]
+    #[arg(short = 'c', long = "config", global = true)]
     config: Option<PathBuf>,
 
-    /// Server listen address
-    #[arg(long)]
-    server: Option<String>,
+    #[command(subcommand)]
+    command: Command,
+}
 
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// List configured providers
+    List,
+    /// Add a provider
+    Add(AddArgs),
+    /// Change llmapi settings
+    Set(SetArgs),
+    /// Start the HTTP server
+    Server(ServerArgs),
+}
+
+#[derive(Debug, Args)]
+struct AddArgs {
+    /// Provider name used in HTTP route prefixes
+    name: String,
+    /// Provider protocol: openai-chat|chat, openai-responses|responses, anthropic|messages
+    #[arg(long = "type")]
+    provider_type: Provider,
     /// Upstream API base URL
     #[arg(long)]
-    base_url: Option<String>,
-
-    /// Upstream provider: openai-compatible, openai-chat, openai-responses, claude, gemini
+    baseurl: String,
+    /// Upstream API key
     #[arg(long)]
-    provider: Option<Provider>,
+    apikey: Option<String>,
+}
 
-    /// Upstream API key. Overrides client request keys.
+#[derive(Debug, Args)]
+struct SetArgs {
+    #[command(subcommand)]
+    command: SetCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum SetCommand {
+    /// Set the default provider
+    Default { provider: String },
+}
+
+#[derive(Debug, Args)]
+struct ServerArgs {
+    /// Override the server listen address from the config file
     #[arg(long)]
-    api_key: Option<String>,
-
-    /// Emit normalized LLM request and response logs.
-    #[arg(long)]
-    debug: bool,
-
-    /// Log target. Use "-" for stdout.
-    #[arg(long = "log", default_value = DEFAULT_LOG_TARGET)]
-    log: String,
+    server: Option<String>,
 }
 
 impl Cmd {
     fn default_config_path() -> PathBuf {
         dirs::home_dir()
-            .map(|home| home.join(".config/enyo/llmapi.toml"))
-            .unwrap_or_else(|| PathBuf::from(".config/enyo/llmapi.toml"))
+            .map(|home| home.join(".config/enyo/llmapi.yaml"))
+            .unwrap_or_else(|| PathBuf::from(".config/enyo/llmapi.yaml"))
     }
 
     fn config_path(&self) -> PathBuf {
@@ -65,122 +88,241 @@ impl Cmd {
             .unwrap_or_else(Self::default_config_path)
     }
 
-    fn load_config(&self) -> Result<Config> {
-        let config_path = self.config_path();
-        let mut config = Config::load(&config_path)
-            .with_context(|| format!("load config {}", config_path.display()))?;
+    fn list(&self) -> Result<()> {
+        let config = self.load_config()?;
+        print!("{}", format_provider_list(&config));
+        Ok(())
+    }
 
-        if let Some(server) = &self.server {
+    fn add(&self, args: &AddArgs) -> Result<()> {
+        let path = self.config_path();
+        let mut config = Config::load_for_update(&path)
+            .with_context(|| format!("load config {}", path.display()))?;
+        config.add_provider(
+            args.name.clone(),
+            ProviderConfig {
+                provider_type: args.provider_type,
+                base_url: args.baseurl.clone(),
+                api_key: args.apikey.clone(),
+            },
+        )?;
+        config
+            .save(&path)
+            .with_context(|| format!("save config {}", path.display()))?;
+        Ok(())
+    }
+
+    fn set(&self, args: &SetArgs) -> Result<()> {
+        let path = self.config_path();
+        let mut config =
+            Config::load(&path).with_context(|| format!("load config {}", path.display()))?;
+        match &args.command {
+            SetCommand::Default { provider } => config.set_default(provider)?,
+        }
+        config
+            .save(&path)
+            .with_context(|| format!("save config {}", path.display()))?;
+        Ok(())
+    }
+
+    fn load_config(&self) -> Result<Config> {
+        let path = self.config_path();
+        Config::load(&path).with_context(|| format!("load config {}", path.display()))
+    }
+
+    async fn serve(&self, args: &ServerArgs) -> Result<()> {
+        let mut config = self.load_config()?;
+        if let Some(server) = &args.server {
             config.server = server.clone();
         }
-        if let Some(base_url) = &self.base_url {
-            config.base_url = base_url.trim_end_matches('/').to_string();
-        }
-        if let Some(provider) = self.provider {
-            config.provider = provider;
-        }
-        if let Some(api_key) = &self.api_key {
-            config.api_key = Some(api_key.clone());
-        }
-        if self.debug {
-            config.debug = true;
-        }
-
-        Ok(config)
-    }
-}
-
-impl Action for Cmd {
-    fn execute(&self) -> impl std::future::Future<Output = Result<()>> + Send {
-        self.execute_async()
-    }
-}
-
-impl Cmd {
-    async fn execute_async(&self) -> Result<()> {
-        log::init(&self.log).with_context(|| format!("open log target {}", self.log))?;
-        let config = self.load_config()?;
         let addr: SocketAddr = config
             .server
             .parse()
             .context("parse server listen address")?;
-
         server::serve(addr, config).await
     }
+}
+
+impl Action for Cmd {
+    async fn execute(&self) -> Result<()> {
+        match &self.command {
+            Command::List => self.list(),
+            Command::Add(args) => self.add(args),
+            Command::Set(args) => self.set(args),
+            Command::Server(args) => self.serve(args).await,
+        }
+    }
+}
+
+fn format_provider_list(config: &Config) -> String {
+    let mut output = String::from("NAME\tTYPE\tBASEURL\tDEFAULT\n");
+    for (name, provider) in &config.providers {
+        output.push_str(&format!(
+            "{}\t{}\t{}\t{}\n",
+            name,
+            provider.provider_type,
+            provider.base_url,
+            if name == &config.default { "*" } else { "" }
+        ));
+    }
+    output
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{collections::BTreeMap, fs};
     use tempfile::tempdir;
 
     #[test]
-    fn default_config_path_points_to_enyo_llmapi_toml() {
-        let path = Cmd::default_config_path();
-
-        assert!(path.ends_with(".config/enyo/llmapi.toml"));
+    fn default_config_path_points_to_yaml() {
+        assert!(Cmd::default_config_path().ends_with(".config/enyo/llmapi.yaml"));
     }
 
     #[test]
-    fn cli_args_override_file_config() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("llmapi.toml");
-        fs::write(
-            &path,
-            r#"
-server = "127.0.0.1:8080"
-base_url = "https://example.test/"
-provider = "openai-chat"
-api_key = "sk-file"
-"#,
-        )
-        .unwrap();
+    fn parses_required_subcommands() {
+        assert!(matches!(
+            Cmd::parse_from(["llmapi", "list"]).command,
+            Command::List
+        ));
+        let add = Cmd::parse_from([
+            "llmapi",
+            "add",
+            "deepseek",
+            "--type",
+            "chat",
+            "--baseurl",
+            "https://api.deepseek.test",
+            "--apikey",
+            "sk-test",
+        ]);
+        assert!(matches!(
+            add.command,
+            Command::Add(AddArgs {
+                provider_type: Provider::OpenAiChat,
+                ..
+            })
+        ));
+        let set = Cmd::parse_from(["llmapi", "set", "default", "deepseek"]);
+        assert!(matches!(
+            set.command,
+            Command::Set(SetArgs {
+                command: SetCommand::Default { .. }
+            })
+        ));
+        assert!(matches!(
+            Cmd::parse_from(["llmapi", "server"]).command,
+            Command::Server(_)
+        ));
+    }
 
-        let cmd = Cmd {
-            config: Some(path),
-            server: Some("127.0.0.1:9090".to_string()),
-            base_url: Some("https://api.openai.com/".to_string()),
-            provider: Some(Provider::OpenAiResponses),
-            api_key: Some("sk-cli".to_string()),
-            debug: true,
-            log: DEFAULT_LOG_TARGET.to_string(),
+    #[test]
+    fn add_and_set_commands_persist_config() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("llmapi.yaml");
+        let add = Cmd::parse_from([
+            "llmapi",
+            "--config",
+            path.to_str().unwrap(),
+            "add",
+            "deepseek",
+            "--type",
+            "chat",
+            "--baseurl",
+            "https://api.deepseek.test/",
+        ]);
+        let Command::Add(args) = &add.command else {
+            unreachable!()
+        };
+        add.add(args).unwrap();
+
+        let add_openai = Cmd::parse_from([
+            "llmapi",
+            "-c",
+            path.to_str().unwrap(),
+            "add",
+            "openai",
+            "--type",
+            "responses",
+            "--baseurl",
+            "https://api.openai.test/v1",
+        ]);
+        let Command::Add(args) = &add_openai.command else {
+            unreachable!()
+        };
+        add_openai.add(args).unwrap();
+
+        let set = Cmd::parse_from([
+            "llmapi",
+            "-c",
+            path.to_str().unwrap(),
+            "set",
+            "default",
+            "openai",
+        ]);
+        let Command::Set(args) = &set.command else {
+            unreachable!()
+        };
+        set.set(args).unwrap();
+
+        let config = Config::load(path).unwrap();
+        assert_eq!(config.default, "openai");
+        assert_eq!(config.providers.len(), 2);
+    }
+
+    #[test]
+    fn provider_list_marks_default_without_api_keys() {
+        let config = Config {
+            server: "127.0.0.1:8080".into(),
+            default: "deepseek".into(),
+            providers: BTreeMap::from([(
+                "deepseek".into(),
+                ProviderConfig {
+                    provider_type: Provider::OpenAiChat,
+                    base_url: "https://api.deepseek.test".into(),
+                    api_key: Some("sk-secret".into()),
+                },
+            )]),
         };
 
-        let config = cmd.load_config().unwrap();
+        let output = format_provider_list(&config);
 
-        assert_eq!(config.server, "127.0.0.1:9090");
-        assert_eq!(config.base_url, "https://api.openai.com");
-        assert_eq!(config.provider, Provider::OpenAiResponses);
-        assert_eq!(config.api_key.as_deref(), Some("sk-cli"));
-        assert!(config.debug);
+        assert!(output.contains("deepseek\topenai-chat\thttps://api.deepseek.test\t*"));
+        assert!(!output.contains("sk-secret"));
     }
 
     #[test]
-    fn log_defaults_to_stdout() {
-        let cmd = Cmd::parse_from(["llmapi"]);
-
-        assert_eq!(cmd.log, "-");
+    fn server_overrides_parse() {
+        let cmd = Cmd::parse_from(["llmapi", "server", "--server", "127.0.0.1:9090"]);
+        let Command::Server(args) = cmd.command else {
+            unreachable!()
+        };
+        assert_eq!(args.server.as_deref(), Some("127.0.0.1:9090"));
     }
 
     #[test]
-    fn log_accepts_file_path() {
-        let cmd = Cmd::parse_from(["llmapi", "--log", "/tmp/llmapi.log"]);
+    fn set_rejects_unknown_provider_without_rewriting_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("llmapi.yaml");
+        fs::write(
+            &path,
+            "default: deepseek\nproviders:\n  deepseek:\n    type: chat\n    baseurl: https://example.test\n",
+        )
+        .unwrap();
+        let before = fs::read_to_string(&path).unwrap();
+        let cmd = Cmd::parse_from([
+            "llmapi",
+            "-c",
+            path.to_str().unwrap(),
+            "set",
+            "default",
+            "missing",
+        ]);
+        let Command::Set(args) = &cmd.command else {
+            unreachable!()
+        };
 
-        assert_eq!(cmd.log, "/tmp/llmapi.log");
-    }
-
-    #[test]
-    fn debug_flag_defaults_to_false() {
-        let cmd = Cmd::parse_from(["llmapi"]);
-
-        assert!(!cmd.debug);
-    }
-
-    #[test]
-    fn debug_flag_can_be_enabled() {
-        let cmd = Cmd::parse_from(["llmapi", "--debug"]);
-
-        assert!(cmd.debug);
+        assert!(cmd.set(args).is_err());
+        assert_eq!(fs::read_to_string(path).unwrap(), before);
     }
 }

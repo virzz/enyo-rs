@@ -5,22 +5,25 @@ use axum::{
 use bytes::Bytes;
 use futures_util::{FutureExt, StreamExt};
 use serde_json::Value;
+use tracing::{debug, error, info, warn};
 
 use super::{
     adapters::{
-        anthropic::AnthropicAdapter, gemini::GeminiAdapter, openai_chat::OpenAiChatAdapter,
+        anthropic::AnthropicAdapter, openai_chat::OpenAiChatAdapter,
         openai_responses::OpenAiResponsesAdapter, AdapterError, RequestAdapter, ResponseAdapter,
         StreamAdapter,
     },
     auth,
-    log::{self, LogEvent},
+    config::ProviderConfig,
     model::{LLMRequest, LLMResponse},
-    protocol::{detect_input, is_transparent, upstream_for, InputFormat, UpstreamFormat},
+    protocol::{detect_route, is_transparent, upstream_for, InputFormat, UpstreamFormat},
+    redact,
     server::AppState,
 };
 
 struct ForwardRequest<'a> {
     state: AppState,
+    provider: ProviderConfig,
     headers: &'a HeaderMap,
     query: Option<&'a str>,
     input: &'a InputFormat,
@@ -39,6 +42,40 @@ pub async fn handle(
     let query = request.uri().query().map(ToString::to_string);
     let method = request.method().clone();
     let request_path = request.uri().path().to_string();
+    let Some(route) = detect_route(&request_path) else {
+        return response(
+            StatusCode::NOT_FOUND,
+            Bytes::from("unknown llmapi route"),
+            "text/plain",
+        );
+    };
+    if method != Method::POST {
+        return response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            Bytes::from("llmapi endpoints require POST"),
+            "text/plain",
+        );
+    }
+    let mut provider = match state.config.provider(route.provider.as_deref()) {
+        Ok((_, provider)) => provider.clone(),
+        Err(err) => {
+            return response(
+                StatusCode::NOT_FOUND,
+                Bytes::from(err.to_string()),
+                "text/plain",
+            );
+        }
+    };
+    provider.api_key = match provider.api_key() {
+        Ok(api_key) => api_key,
+        Err(err) => {
+            return response(
+                StatusCode::BAD_GATEWAY,
+                Bytes::from(err.to_string()),
+                "text/plain",
+            );
+        }
+    };
     let body = match to_bytes(request.into_body(), usize::MAX).await {
         Ok(body) => body,
         Err(err) => {
@@ -49,34 +86,32 @@ pub async fn handle(
             );
         }
     };
-    let Some(input) = detect_input(&request_path) else {
-        log::emit(LogEvent::TransparentProxyUsed, &request_path);
+    let input = route.input;
+    let (upstream, path) = upstream_for(provider.provider_type);
+
+    if is_transparent(input, upstream) {
+        debug!(target: "llmapi", path, "transparent proxy");
         return forward_raw(
             state,
+            provider,
             &headers,
             method,
             query.as_deref(),
-            &request_path,
+            path,
             body,
         )
         .await;
-    };
-    let (upstream, path) = upstream_for(state.config.provider, &input);
-
-    if is_transparent(&input, &upstream) {
-        let path = transparent_path(&input, &path);
-        log::emit(LogEvent::TransparentProxyUsed, &path);
-        return forward_raw(state, &headers, method, query.as_deref(), &path, body).await;
     }
 
-    log::emit(LogEvent::AdapterUsed, format!("{input:?} -> {upstream:?}"));
+    debug!(target: "llmapi", ?input, ?upstream, "protocol adapter selected");
     convert_and_forward(ForwardRequest {
         state,
+        provider,
         headers: &headers,
         query: query.as_deref(),
         input: &input,
         upstream,
-        path: &path,
+        path,
         body,
         upstream_raw,
     })
@@ -85,41 +120,42 @@ pub async fn handle(
 
 pub fn forward_raw(
     state: AppState,
+    provider: ProviderConfig,
     headers: &HeaderMap,
     method: Method,
     query: Option<&str>,
     path: &str,
     body: Bytes,
 ) -> impl std::future::Future<Output = Response<Body>> + Send {
-    let url = upstream_url(&state.config.base_url, path, query);
+    let url = upstream_url(&provider.base_url, path, query);
     let upstream_method = method.as_str().to_string();
-    send_upstream_request(state, headers, method, query, &url, body).map(move |result| match result
-    {
-        Ok(upstream) => {
-            log::emit(
-                LogEvent::UpstreamResponseReceived,
-                format!(
-                    "{} {} {}",
-                    upstream_method,
-                    log::redact_url(upstream.url().as_str()),
-                    upstream.status()
-                ),
-            );
-            raw_upstream_response(upstream)
-        }
-        Err(err) => {
-            log::emit(LogEvent::UpstreamError, err.to_string());
-            response(
-                StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
-            )
+    send_upstream_request(state, provider, headers, method, query, &url, body).map(move |result| {
+        match result {
+            Ok(upstream) => {
+                info!(
+                    target: "llmapi",
+                    method = %upstream_method,
+                    url = %redact::url(upstream.url().as_str()),
+                    status = %upstream.status(),
+                    "upstream response received"
+                );
+                raw_upstream_response(upstream)
+            }
+            Err(err) => {
+                error!(target: "llmapi", error = %err, "upstream request failed");
+                response(
+                    StatusCode::BAD_GATEWAY,
+                    Bytes::from(err.to_string()),
+                    "text/plain",
+                )
+            }
         }
     })
 }
 
 fn send_upstream_request(
     state: AppState,
+    provider: ProviderConfig,
     headers: &HeaderMap,
     method: Method,
     auth_query: Option<&str>,
@@ -130,9 +166,11 @@ fn send_upstream_request(
     let mut upstream_headers = HeaderMap::new();
     auth::apply_api_key(
         &mut upstream_headers,
-        state.config.api_key.as_deref(),
+        provider.provider_type,
+        provider.api_key.as_deref(),
         extracted.as_deref(),
     );
+    auth::apply_protocol_headers(&mut upstream_headers, provider.provider_type, headers);
     state
         .client
         .request(method, url)
@@ -171,9 +209,11 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
             );
         }
     };
-    if forward.state.config.debug {
-        log::emit(LogEvent::LlmRequest, log::format_json(&llm_request));
-    }
+    debug!(
+        target: "llmapi",
+        request = %redact::format_json(&llm_request),
+        "normalized LLM request"
+    );
     let upstream_json = match llm_to_upstream(forward.upstream, &llm_request) {
         Ok(value) => value,
         Err(err) => {
@@ -185,10 +225,10 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
         }
     };
 
-    let path = materialize_path_for_request(forward.path, forward.upstream, &llm_request);
-    let url = upstream_url(&forward.state.config.base_url, &path, forward.query);
+    let url = upstream_url(&forward.provider.base_url, forward.path, forward.query);
     let upstream_response = match send_upstream_request(
         forward.state.clone(),
+        forward.provider,
         forward.headers,
         Method::POST,
         forward.query,
@@ -199,7 +239,7 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
     {
         Ok(response) => response,
         Err(err) => {
-            log::emit(LogEvent::UpstreamError, err.to_string());
+            error!(target: "llmapi", error = %err, "upstream request failed");
             return response(
                 StatusCode::BAD_GATEWAY,
                 Bytes::from(err.to_string()),
@@ -207,24 +247,17 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
             );
         }
     };
-    log::emit(
-        LogEvent::UpstreamResponseReceived,
-        format!(
-            "POST {} {}",
-            log::redact_url(upstream_response.url().as_str()),
-            upstream_response.status()
-        ),
+    info!(
+        target: "llmapi",
+        method = "POST",
+        url = %redact::url(upstream_response.url().as_str()),
+        status = %upstream_response.status(),
+        "upstream response received"
     );
     if forward.upstream_raw {
         return raw_upstream_response(upstream_response);
     }
-    convert_response_back(
-        upstream_response,
-        forward.input,
-        forward.upstream,
-        forward.state.config.debug,
-    )
-    .await
+    convert_response_back(upstream_response, forward.input, forward.upstream).await
 }
 
 fn input_to_llm(input: &InputFormat, value: Value) -> Result<LLMRequest, AdapterError> {
@@ -232,9 +265,6 @@ fn input_to_llm(input: &InputFormat, value: Value) -> Result<LLMRequest, Adapter
         InputFormat::OpenAiChat => OpenAiChatAdapter::to_llm_request(value),
         InputFormat::OpenAiResponses => OpenAiResponsesAdapter::to_llm_request(value),
         InputFormat::AnthropicMessages => AnthropicAdapter::to_llm_request(value),
-        InputFormat::GeminiGenerate { model, stream } => {
-            GeminiAdapter::to_llm_request_with_model(value, model, *stream)
-        }
     }
 }
 
@@ -243,53 +273,32 @@ fn llm_to_upstream(upstream: UpstreamFormat, request: &LLMRequest) -> Result<Val
         UpstreamFormat::OpenAiChat => OpenAiChatAdapter::from_llm_request(request),
         UpstreamFormat::OpenAiResponses => OpenAiResponsesAdapter::from_llm_request(request),
         UpstreamFormat::AnthropicMessages => AnthropicAdapter::from_llm_request(request),
-        UpstreamFormat::GeminiGenerate => GeminiAdapter::from_llm_request(request),
     }
 }
 
-fn materialize_path(path: &str, model: &str) -> String {
-    path.replace("{model}", model)
-}
-
 fn upstream_url(base_url: &str, path: &str, query: Option<&str>) -> String {
-    match query {
+    match query.and_then(forwarded_query) {
         Some(query) => format!("{base_url}{path}?{query}"),
         None => format!("{base_url}{path}"),
     }
 }
 
-fn materialize_path_for_request(
-    path: &str,
-    upstream: UpstreamFormat,
-    request: &LLMRequest,
-) -> String {
-    let path = materialize_path(path, &request.model);
-    if upstream == UpstreamFormat::GeminiGenerate && request.stream {
-        path.replace(":generateContent", ":streamGenerateContent")
-    } else {
-        path
+fn forwarded_query(query: &str) -> Option<String> {
+    let values: Vec<_> = url::form_urlencoded::parse(query.as_bytes())
+        .filter(|(key, _)| key != "key" && key != "llmapi_response_mode")
+        .collect();
+    if values.is_empty() {
+        return None;
     }
-}
-
-fn transparent_path(input: &InputFormat, path: &str) -> String {
-    match input {
-        InputFormat::GeminiGenerate { model, stream } => {
-            let action = if *stream {
-                "streamGenerateContent"
-            } else {
-                "generateContent"
-            };
-            format!("/v1beta/models/{model}:{action}")
-        }
-        _ => path.to_string(),
-    }
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    serializer.extend_pairs(values);
+    Some(serializer.finish())
 }
 
 async fn convert_response_back(
     upstream_response: reqwest::Response,
     input: &InputFormat,
     upstream: UpstreamFormat,
-    debug: bool,
 ) -> Response<Body> {
     let status = upstream_response.status();
     let content_type = upstream_response
@@ -303,7 +312,7 @@ async fn convert_response_back(
     }
 
     if content_type.contains("text/event-stream") {
-        return converted_sse_response(upstream_response, input.clone(), upstream);
+        return converted_sse_response(upstream_response, *input, upstream);
     }
 
     let body = upstream_response.bytes().await.unwrap_or_default();
@@ -327,9 +336,11 @@ async fn convert_response_back(
             );
         }
     };
-    if debug {
-        log::emit(LogEvent::LlmResponse, log::format_json(&llm));
-    }
+    debug!(
+        target: "llmapi",
+        response = %redact::format_json(&llm),
+        "normalized LLM response"
+    );
     let output = match llm_to_input(input, &llm) {
         Ok(value) => value,
         Err(err) => {
@@ -369,7 +380,6 @@ fn upstream_to_llm(upstream: UpstreamFormat, value: Value) -> Result<LLMResponse
         UpstreamFormat::OpenAiChat => OpenAiChatAdapter::to_llm_response(value),
         UpstreamFormat::OpenAiResponses => OpenAiResponsesAdapter::to_llm_response(value),
         UpstreamFormat::AnthropicMessages => AnthropicAdapter::to_llm_response(value),
-        UpstreamFormat::GeminiGenerate => GeminiAdapter::to_llm_response(value),
     }
 }
 
@@ -378,7 +388,6 @@ fn llm_to_input(input: &InputFormat, response: &LLMResponse) -> Result<Value, Ad
         InputFormat::OpenAiChat => OpenAiChatAdapter::from_llm_response(response),
         InputFormat::OpenAiResponses => OpenAiResponsesAdapter::from_llm_response(response),
         InputFormat::AnthropicMessages => AnthropicAdapter::from_llm_response(response),
-        InputFormat::GeminiGenerate { .. } => GeminiAdapter::from_llm_response(response),
     }
 }
 
@@ -390,7 +399,6 @@ fn parse_stream_event(
         UpstreamFormat::OpenAiChat => OpenAiChatAdapter::parse_stream_event(event),
         UpstreamFormat::OpenAiResponses => OpenAiResponsesAdapter::parse_stream_event(event),
         UpstreamFormat::AnthropicMessages => AnthropicAdapter::parse_stream_event(event),
-        UpstreamFormat::GeminiGenerate => GeminiAdapter::parse_stream_event(event),
     }
 }
 
@@ -402,7 +410,6 @@ fn format_stream_event(
         InputFormat::OpenAiChat => OpenAiChatAdapter::format_stream_event(event),
         InputFormat::OpenAiResponses => OpenAiResponsesAdapter::format_stream_event(event),
         InputFormat::AnthropicMessages => AnthropicAdapter::format_stream_event(event),
-        InputFormat::GeminiGenerate { .. } => GeminiAdapter::format_stream_event(event),
     }
 }
 
@@ -456,13 +463,13 @@ fn convert_sse_event(event: &str, input: &InputFormat, upstream: UpstreamFormat)
             Ok(Some(text)) => Some(text),
             Ok(None) => None,
             Err(err) => {
-                log::emit(LogEvent::StreamEventConversionWarning, err.to_string());
+                warn!(target: "llmapi", error = %err, "stream event conversion failed");
                 None
             }
         },
         Ok(None) => None,
         Err(err) => {
-            log::emit(LogEvent::StreamEventConversionWarning, err.to_string());
+            warn!(target: "llmapi", error = %err, "stream event conversion failed");
             None
         }
     }
@@ -483,4 +490,21 @@ fn wants_upstream_raw(uri: &axum::http::Uri, headers: &HeaderMap) -> bool {
                 .any(|(key, value)| key == "llmapi_response_mode" && value == "upstream_raw")
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removes_auth_and_internal_query_parameters_from_upstream_url() {
+        assert_eq!(
+            upstream_url(
+                "https://api.example.test/v1",
+                "/responses",
+                Some("key=sk-secret&beta=true&llmapi_response_mode=upstream_raw"),
+            ),
+            "https://api.example.test/v1/responses?beta=true"
+        );
+    }
 }

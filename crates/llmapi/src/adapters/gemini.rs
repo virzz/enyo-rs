@@ -136,7 +136,7 @@ impl ResponseAdapter for GeminiAdapter {
 
 impl StreamAdapter for GeminiAdapter {
     fn parse_stream_event(event: &str) -> Result<Option<LLMStreamEvent>, AdapterError> {
-        let Some(data) = event.strip_prefix("data: ") else {
+        let Some(data) = super::sse_data(event) else {
             return Ok(None);
         };
         let value: Value =

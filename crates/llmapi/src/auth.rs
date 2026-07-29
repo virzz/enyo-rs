@@ -1,5 +1,7 @@
 use axum::http::{header, HeaderMap, HeaderValue};
 
+use super::config::Provider;
+
 pub fn extract_api_key(headers: &HeaderMap, query: Option<&str>) -> Option<String> {
     if let Some(value) = headers
         .get(header::AUTHORIZATION)
@@ -19,13 +21,41 @@ pub fn extract_api_key(headers: &HeaderMap, query: Option<&str>) -> Option<Strin
     query.and_then(extract_query_key)
 }
 
-pub fn apply_api_key(headers: &mut HeaderMap, configured: Option<&str>, extracted: Option<&str>) {
+pub fn apply_api_key(
+    headers: &mut HeaderMap,
+    provider: Provider,
+    configured: Option<&str>,
+    extracted: Option<&str>,
+) {
     let Some(key) = configured.or(extracted) else {
         return;
     };
 
-    if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
-        headers.insert(header::AUTHORIZATION, value);
+    match provider {
+        Provider::OpenAiChat | Provider::OpenAiResponses => {
+            if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
+                headers.insert(header::AUTHORIZATION, value);
+            }
+        }
+        Provider::Anthropic => {
+            if let Ok(value) = HeaderValue::from_str(key) {
+                headers.insert("x-api-key", value);
+            }
+        }
+    }
+}
+
+pub fn apply_protocol_headers(headers: &mut HeaderMap, provider: Provider, source: &HeaderMap) {
+    if provider != Provider::Anthropic {
+        return;
+    }
+    for name in ["anthropic-version", "anthropic-beta"] {
+        if let Some(value) = source.get(name) {
+            headers.insert(name, value.clone());
+        }
+    }
+    if !headers.contains_key("anthropic-version") {
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
     }
 }
 
@@ -68,7 +98,12 @@ mod tests {
     fn configured_key_overrides_extracted_key() {
         let mut headers = HeaderMap::new();
 
-        apply_api_key(&mut headers, Some("sk-config"), Some("sk-client"));
+        apply_api_key(
+            &mut headers,
+            Provider::OpenAiChat,
+            Some("sk-config"),
+            Some("sk-client"),
+        );
 
         assert_eq!(
             headers
@@ -78,5 +113,18 @@ mod tests {
                 .unwrap(),
             "Bearer sk-config"
         );
+    }
+
+    #[test]
+    fn applies_anthropic_key_and_version_headers() {
+        let source = HeaderMap::new();
+        let mut headers = HeaderMap::new();
+
+        apply_api_key(&mut headers, Provider::Anthropic, Some("sk-ant"), None);
+        apply_protocol_headers(&mut headers, Provider::Anthropic, &source);
+
+        assert_eq!(headers["x-api-key"], "sk-ant");
+        assert_eq!(headers["anthropic-version"], "2023-06-01");
+        assert!(!headers.contains_key(header::AUTHORIZATION));
     }
 }

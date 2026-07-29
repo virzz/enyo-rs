@@ -45,7 +45,7 @@ impl RequestAdapter for OpenAiChatAdapter {
             top_p: value["top_p"].as_f64(),
             stop: value.get("stop").cloned(),
             stream,
-            tools: value["tools"].as_array().cloned().unwrap_or_default(),
+            tools: super::tools_from_openai_chat(&value["tools"]),
             metadata: json!({ "source": "openai_chat" }),
         })
     }
@@ -104,7 +104,7 @@ impl ResponseAdapter for OpenAiChatAdapter {
 
 impl StreamAdapter for OpenAiChatAdapter {
     fn parse_stream_event(event: &str) -> Result<Option<LLMStreamEvent>, AdapterError> {
-        let Some(data) = event.strip_prefix("data: ") else {
+        let Some(data) = super::sse_data(event) else {
             return Ok(None);
         };
         if data.trim() == "[DONE]" {
@@ -197,7 +197,7 @@ fn copy_common_request_fields(value: &mut Value, request: &LLMRequest) {
         value["stop"] = stop.clone();
     }
     if !request.tools.is_empty() {
-        value["tools"] = json!(request.tools);
+        value["tools"] = json!(super::tools_to_openai_chat(&request.tools));
     }
 }
 

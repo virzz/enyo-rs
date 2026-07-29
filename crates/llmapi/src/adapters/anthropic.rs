@@ -32,14 +32,17 @@ impl RequestAdapter for AnthropicAdapter {
         }
         Ok(LLMRequest {
             model,
-            system: value["system"].as_str().map(ToString::to_string),
+            system: value
+                .get("system")
+                .map(extract_anthropic_text)
+                .filter(|text| !text.is_empty()),
             messages,
             temperature: value["temperature"].as_f64(),
             max_tokens: value["max_tokens"].as_u64(),
             top_p: value["top_p"].as_f64(),
             stop: value.get("stop_sequences").cloned(),
             stream: value["stream"].as_bool().unwrap_or(false),
-            tools: value["tools"].as_array().cloned().unwrap_or_default(),
+            tools: super::tools_from_anthropic(&value["tools"]),
             metadata: json!({ "source": "anthropic" }),
         })
     }
@@ -74,7 +77,10 @@ impl RequestAdapter for AnthropicAdapter {
             value["top_p"] = json!(top_p);
         }
         if !request.tools.is_empty() {
-            value["tools"] = json!(request.tools);
+            value["tools"] = json!(super::tools_to_anthropic(&request.tools));
+        }
+        if let Some(stop) = &request.stop {
+            value["stop_sequences"] = stop.clone();
         }
         Ok(value)
     }
@@ -107,7 +113,7 @@ impl ResponseAdapter for AnthropicAdapter {
 
 impl StreamAdapter for AnthropicAdapter {
     fn parse_stream_event(event: &str) -> Result<Option<LLMStreamEvent>, AdapterError> {
-        let Some(data) = event.strip_prefix("data: ") else {
+        let Some(data) = super::sse_data(event) else {
             return Ok(None);
         };
         let value: Value =

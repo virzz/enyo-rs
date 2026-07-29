@@ -1,11 +1,10 @@
 use super::config::Provider;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputFormat {
     OpenAiChat,
     OpenAiResponses,
     AnthropicMessages,
-    GeminiGenerate { model: String, stream: bool },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,67 +12,50 @@ pub enum UpstreamFormat {
     OpenAiChat,
     OpenAiResponses,
     AnthropicMessages,
-    GeminiGenerate,
 }
 
-pub fn detect_input(path: &str) -> Option<InputFormat> {
-    match path {
-        "/v1/chat/completions" => Some(InputFormat::OpenAiChat),
-        "/v1/responses" => Some(InputFormat::OpenAiResponses),
-        "/v1/messages" | "/anthropic/v1/messages" => Some(InputFormat::AnthropicMessages),
-        _ => detect_gemini(path),
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Route {
+    pub provider: Option<String>,
+    pub input: InputFormat,
 }
 
-fn detect_gemini(path: &str) -> Option<InputFormat> {
-    let rest = path.strip_prefix("/v1beta/models/")?;
-    if let Some(model) = rest.strip_suffix(":generateContent") {
-        return gemini_input(model, false);
+pub fn detect_route(path: &str) -> Option<Route> {
+    if let Some(input) = detect_endpoint(path) {
+        return Some(Route {
+            provider: None,
+            input,
+        });
     }
-    if let Some(model) = rest.strip_suffix(":streamGenerateContent") {
-        return gemini_input(model, true);
-    }
-    None
-}
 
-fn gemini_input(model: &str, stream: bool) -> Option<InputFormat> {
-    if model.is_empty() {
+    let (provider, endpoint) = path.strip_prefix('/')?.split_once('/')?;
+    if provider.is_empty() || provider.contains('/') {
         return None;
     }
-    Some(InputFormat::GeminiGenerate {
-        model: model.to_string(),
-        stream,
+    detect_endpoint(&format!("/{endpoint}")).map(|input| Route {
+        provider: Some(provider.to_string()),
+        input,
     })
 }
 
-pub fn upstream_for(provider: Provider, input: &InputFormat) -> (UpstreamFormat, String) {
-    match provider {
-        Provider::OpenAiCompatible => match input {
-            InputFormat::OpenAiResponses => {
-                (UpstreamFormat::OpenAiResponses, "/v1/responses".to_string())
-            }
-            _ => (
-                UpstreamFormat::OpenAiChat,
-                "/v1/chat/completions".to_string(),
-            ),
-        },
-        Provider::OpenAiChat => (
-            UpstreamFormat::OpenAiChat,
-            "/v1/chat/completions".to_string(),
-        ),
-        Provider::OpenAiResponses => (UpstreamFormat::OpenAiResponses, "/v1/responses".to_string()),
-        Provider::Claude => (
-            UpstreamFormat::AnthropicMessages,
-            "/v1/messages".to_string(),
-        ),
-        Provider::Gemini => (
-            UpstreamFormat::GeminiGenerate,
-            "/v1beta/models/{model}:generateContent".to_string(),
-        ),
+fn detect_endpoint(path: &str) -> Option<InputFormat> {
+    match path {
+        "/chat/completions" | "/v1/chat/completions" => Some(InputFormat::OpenAiChat),
+        "/responses" | "/v1/responses" => Some(InputFormat::OpenAiResponses),
+        "/messages" | "/v1/messages" => Some(InputFormat::AnthropicMessages),
+        _ => None,
     }
 }
 
-pub fn is_transparent(input: &InputFormat, upstream: &UpstreamFormat) -> bool {
+pub fn upstream_for(provider: Provider) -> (UpstreamFormat, &'static str) {
+    match provider {
+        Provider::OpenAiChat => (UpstreamFormat::OpenAiChat, "/chat/completions"),
+        Provider::OpenAiResponses => (UpstreamFormat::OpenAiResponses, "/responses"),
+        Provider::Anthropic => (UpstreamFormat::AnthropicMessages, "/messages"),
+    }
+}
+
+pub fn is_transparent(input: InputFormat, upstream: UpstreamFormat) -> bool {
     matches!(
         (input, upstream),
         (InputFormat::OpenAiChat, UpstreamFormat::OpenAiChat)
@@ -85,138 +67,74 @@ pub fn is_transparent(input: &InputFormat, upstream: &UpstreamFormat) -> bool {
                 InputFormat::AnthropicMessages,
                 UpstreamFormat::AnthropicMessages
             )
-            | (
-                InputFormat::GeminiGenerate { .. },
-                UpstreamFormat::GeminiGenerate
-            )
     )
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
     #[test]
-    fn detect_static_paths() {
+    fn detects_default_provider_routes() {
         assert_eq!(
-            detect_input("/v1/chat/completions"),
-            Some(InputFormat::OpenAiChat)
-        );
-        assert_eq!(
-            detect_input("/v1/responses"),
-            Some(InputFormat::OpenAiResponses)
-        );
-        assert_eq!(
-            detect_input("/v1/messages"),
-            Some(InputFormat::AnthropicMessages)
-        );
-        assert_eq!(
-            detect_input("/anthropic/v1/messages"),
-            Some(InputFormat::AnthropicMessages)
-        );
-        assert_eq!(detect_input("/v1/unknown"), None);
-    }
-
-    #[test]
-    fn detect_gemini_paths() {
-        assert_eq!(
-            detect_input("/v1beta/models/gemini-2.5-pro:generateContent"),
-            Some(InputFormat::GeminiGenerate {
-                model: "gemini-2.5-pro".to_string(),
-                stream: false,
+            detect_route("/chat/completions"),
+            Some(Route {
+                provider: None,
+                input: InputFormat::OpenAiChat,
             })
         );
         assert_eq!(
-            detect_input("/v1beta/models/gemini-2.5-flash:streamGenerateContent"),
-            Some(InputFormat::GeminiGenerate {
-                model: "gemini-2.5-flash".to_string(),
-                stream: true,
+            detect_route("/responses").unwrap().input,
+            InputFormat::OpenAiResponses
+        );
+        assert_eq!(
+            detect_route("/messages").unwrap().input,
+            InputFormat::AnthropicMessages
+        );
+    }
+
+    #[test]
+    fn detects_named_provider_routes() {
+        assert_eq!(
+            detect_route("/anthropic/chat/completions"),
+            Some(Route {
+                provider: Some("anthropic".into()),
+                input: InputFormat::OpenAiChat,
             })
         );
-        assert_eq!(detect_input("/v1beta/models/:generateContent"), None);
-    }
-
-    #[test]
-    fn maps_openai_compatible_provider() {
         assert_eq!(
-            upstream_for(Provider::OpenAiCompatible, &InputFormat::OpenAiResponses),
-            (UpstreamFormat::OpenAiResponses, "/v1/responses".to_string())
+            detect_route("/openai/responses")
+                .unwrap()
+                .provider
+                .as_deref(),
+            Some("openai")
         );
         assert_eq!(
-            upstream_for(Provider::OpenAiCompatible, &InputFormat::AnthropicMessages),
-            (
-                UpstreamFormat::OpenAiChat,
-                "/v1/chat/completions".to_string()
-            )
+            detect_route("/deepseek/messages").unwrap().input,
+            InputFormat::AnthropicMessages
         );
     }
 
     #[test]
-    fn maps_explicit_providers() {
-        assert_eq!(
-            upstream_for(Provider::OpenAiChat, &InputFormat::OpenAiResponses),
-            (
-                UpstreamFormat::OpenAiChat,
-                "/v1/chat/completions".to_string()
-            )
-        );
-        assert_eq!(
-            upstream_for(Provider::OpenAiResponses, &InputFormat::OpenAiChat),
-            (UpstreamFormat::OpenAiResponses, "/v1/responses".to_string())
-        );
-        assert_eq!(
-            upstream_for(Provider::Claude, &InputFormat::OpenAiChat),
-            (
-                UpstreamFormat::AnthropicMessages,
-                "/v1/messages".to_string()
-            )
-        );
-        assert_eq!(
-            upstream_for(
-                Provider::Gemini,
-                &InputFormat::GeminiGenerate {
-                    model: "gemini-2.5-flash".to_string(),
-                    stream: true,
-                },
-            ),
-            (
-                UpstreamFormat::GeminiGenerate,
-                "/v1beta/models/{model}:generateContent".to_string()
-            )
-        );
-        assert_eq!(
-            upstream_for(Provider::Gemini, &InputFormat::OpenAiChat),
-            (
-                UpstreamFormat::GeminiGenerate,
-                "/v1beta/models/{model}:generateContent".to_string()
-            )
-        );
+    fn rejects_unknown_routes() {
+        assert_eq!(detect_route("/models"), None);
+        assert_eq!(detect_route("/openai/models"), None);
+        assert_eq!(detect_route("/too/many/responses"), None);
     }
 
     #[test]
-    fn reports_transparent_routes() {
-        assert!(is_transparent(
-            &InputFormat::OpenAiChat,
-            &UpstreamFormat::OpenAiChat
-        ));
-        assert!(is_transparent(
-            &InputFormat::OpenAiResponses,
-            &UpstreamFormat::OpenAiResponses
-        ));
-        assert!(is_transparent(
-            &InputFormat::AnthropicMessages,
-            &UpstreamFormat::AnthropicMessages
-        ));
-        assert!(is_transparent(
-            &InputFormat::GeminiGenerate {
-                model: "gemini-2.5-pro".to_string(),
-                stream: false,
-            },
-            &UpstreamFormat::GeminiGenerate
-        ));
-        assert!(!is_transparent(
-            &InputFormat::AnthropicMessages,
-            &UpstreamFormat::OpenAiChat
-        ));
+    fn maps_provider_to_canonical_upstream_endpoint() {
+        assert_eq!(
+            upstream_for(Provider::OpenAiChat),
+            (UpstreamFormat::OpenAiChat, "/chat/completions")
+        );
+        assert_eq!(
+            upstream_for(Provider::OpenAiResponses),
+            (UpstreamFormat::OpenAiResponses, "/responses")
+        );
+        assert_eq!(
+            upstream_for(Provider::Anthropic),
+            (UpstreamFormat::AnthropicMessages, "/messages")
+        );
     }
 }

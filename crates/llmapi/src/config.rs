@@ -1,29 +1,46 @@
-use std::{env, fs, path::Path, str::FromStr};
+use std::{collections::BTreeMap, env, fs, path::Path, str::FromStr};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+const DEFAULT_SERVER: &str = "127.0.0.1:8080";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default = "default_server")]
     pub server: String,
-    pub base_url: String,
-    pub provider: Provider,
-    pub api_key: Option<String>,
-    pub debug: bool,
+    #[serde(default)]
+    pub default: String,
+    #[serde(default)]
+    pub providers: BTreeMap<String, ProviderConfig>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProviderConfig {
+    #[serde(rename = "type")]
+    pub provider_type: Provider,
+    #[serde(rename = "baseurl", alias = "base_url")]
+    pub base_url: String,
+    #[serde(
+        default,
+        rename = "apikey",
+        alias = "api_key",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
 pub enum Provider {
-    #[value(name = "openai-compatible")]
-    OpenAiCompatible,
-    #[value(name = "openai-chat")]
+    #[serde(rename = "openai-chat", alias = "chat")]
+    #[value(name = "openai-chat", alias = "chat")]
     OpenAiChat,
-    #[value(name = "openai-responses")]
+    #[serde(rename = "openai-responses", alias = "responses")]
+    #[value(name = "openai-responses", alias = "responses")]
     OpenAiResponses,
-    #[value(name = "claude")]
-    Claude,
-    #[value(name = "gemini")]
-    Gemini,
+    #[serde(rename = "anthropic", alias = "messages")]
+    #[value(name = "anthropic", alias = "messages")]
+    Anthropic,
 }
 
 #[derive(Debug, Error)]
@@ -34,10 +51,20 @@ pub enum ConfigError {
     Yaml(#[from] serde_yaml::Error),
     #[error("parse toml config: {0}")]
     Toml(#[from] toml::de::Error),
+    #[error("serialize toml config: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
     #[error("unsupported config extension: {0}")]
     UnsupportedExtension(String),
-    #[error("unknown provider: {0}")]
-    UnknownProvider(String),
+    #[error("unknown provider type: {0}")]
+    UnknownProviderType(String),
+    #[error("provider not found: {0}")]
+    ProviderNotFound(String),
+    #[error("provider already exists: {0}")]
+    ProviderAlreadyExists(String),
+    #[error("default provider is not configured: {0}")]
+    DefaultProviderNotFound(String),
+    #[error("invalid provider name: {0}")]
+    InvalidProviderName(String),
     #[error("expand environment variable {name}: {source}")]
     EnvVar {
         name: String,
@@ -46,34 +73,132 @@ pub enum ConfigError {
     },
 }
 
-#[derive(Debug, Deserialize)]
-struct RawConfig {
-    server: String,
-    base_url: String,
-    provider: String,
-    api_key: Option<String>,
-    #[serde(default)]
-    debug: bool,
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            server: default_server(),
+            default: String::new(),
+            providers: BTreeMap::new(),
+        }
+    }
 }
 
 impl Config {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let path = path.as_ref();
         let body = fs::read_to_string(path)?;
-        let raw = match extension(path).as_deref() {
-            Some("yaml" | "yml") => serde_yaml::from_str::<RawConfig>(&body)?,
-            Some("toml") => toml::from_str::<RawConfig>(&body)?,
+        let mut config = match extension(path).as_deref() {
+            Some("yaml" | "yml") => serde_yaml::from_str::<Self>(&body)?,
+            Some("toml") => toml::from_str::<Self>(&body)?,
             Some(ext) => return Err(ConfigError::UnsupportedExtension(ext.to_string())),
             None => return Err(ConfigError::UnsupportedExtension(String::new())),
         };
+        config.normalize();
+        config.validate()?;
+        Ok(config)
+    }
 
-        Ok(Self {
-            server: raw.server,
-            base_url: raw.base_url.trim_end_matches('/').to_string(),
-            provider: Provider::from_str(&raw.provider)?,
-            api_key: raw.api_key.map(expand_env).transpose()?,
-            debug: raw.debug,
-        })
+    pub fn load_for_update(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
+        match Self::load(path.as_ref()) {
+            Ok(config) => Ok(config),
+            Err(ConfigError::Read(err)) if err.kind() == std::io::ErrorKind::NotFound => {
+                Ok(Self::default())
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), ConfigError> {
+        self.validate()?;
+        let path = path.as_ref();
+        let body = match extension(path).as_deref() {
+            Some("yaml" | "yml") => serde_yaml::to_string(self)?,
+            Some("toml") => toml::to_string_pretty(self)?,
+            Some(ext) => return Err(ConfigError::UnsupportedExtension(ext.to_string())),
+            None => return Err(ConfigError::UnsupportedExtension(String::new())),
+        };
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, body)?;
+        Ok(())
+    }
+
+    pub fn add_provider(
+        &mut self,
+        name: String,
+        mut provider: ProviderConfig,
+    ) -> Result<(), ConfigError> {
+        validate_provider_name(&name)?;
+        if self.providers.contains_key(&name) {
+            return Err(ConfigError::ProviderAlreadyExists(name));
+        }
+        provider.normalize();
+        self.providers.insert(name.clone(), provider);
+        if self.default.is_empty() {
+            self.default = name;
+        }
+        Ok(())
+    }
+
+    pub fn set_default(&mut self, name: &str) -> Result<(), ConfigError> {
+        if !self.providers.contains_key(name) {
+            return Err(ConfigError::ProviderNotFound(name.to_string()));
+        }
+        self.default = name.to_string();
+        Ok(())
+    }
+
+    pub fn provider(&self, name: Option<&str>) -> Result<(&str, &ProviderConfig), ConfigError> {
+        let name = name.unwrap_or(&self.default);
+        self.providers
+            .get_key_value(name)
+            .map(|(name, provider)| (name.as_str(), provider))
+            .ok_or_else(|| ConfigError::ProviderNotFound(name.to_string()))
+    }
+
+    fn normalize(&mut self) {
+        self.server = self.server.trim().to_string();
+        self.default = self.default.trim().to_string();
+        for provider in self.providers.values_mut() {
+            provider.normalize();
+        }
+    }
+
+    fn validate(&self) -> Result<(), ConfigError> {
+        for name in self.providers.keys() {
+            validate_provider_name(name)?;
+        }
+        if !self.providers.contains_key(&self.default) {
+            return Err(ConfigError::DefaultProviderNotFound(self.default.clone()));
+        }
+        Ok(())
+    }
+}
+
+impl ProviderConfig {
+    pub fn api_key(&self) -> Result<Option<String>, ConfigError> {
+        self.api_key.clone().map(expand_env).transpose()
+    }
+
+    fn normalize(&mut self) {
+        self.base_url = self.base_url.trim().trim_end_matches('/').to_string();
+    }
+}
+
+impl Provider {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OpenAiChat => "openai-chat",
+            Self::OpenAiResponses => "openai-responses",
+            Self::Anthropic => "anthropic",
+        }
+    }
+}
+
+impl std::fmt::Display for Provider {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
     }
 }
 
@@ -82,14 +207,27 @@ impl FromStr for Provider {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "openai-compatible" => Ok(Self::OpenAiCompatible),
-            "openai-chat" => Ok(Self::OpenAiChat),
-            "openai-responses" => Ok(Self::OpenAiResponses),
-            "claude" => Ok(Self::Claude),
-            "gemini" => Ok(Self::Gemini),
-            other => Err(ConfigError::UnknownProvider(other.to_string())),
+            "openai-chat" | "chat" => Ok(Self::OpenAiChat),
+            "openai-responses" | "responses" => Ok(Self::OpenAiResponses),
+            "anthropic" | "messages" => Ok(Self::Anthropic),
+            other => Err(ConfigError::UnknownProviderType(other.to_string())),
         }
     }
+}
+
+fn default_server() -> String {
+    DEFAULT_SERVER.to_string()
+}
+
+fn validate_provider_name(name: &str) -> Result<(), ConfigError> {
+    if !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Ok(());
+    }
+    Err(ConfigError::InvalidProviderName(name.to_string()))
 }
 
 fn extension(path: &Path) -> Option<String> {
@@ -101,7 +239,6 @@ fn extension(path: &Path) -> Option<String> {
 fn expand_env(value: String) -> Result<String, ConfigError> {
     let mut output = String::with_capacity(value.len());
     let mut rest = value.as_str();
-
     while let Some(start) = rest.find("${") {
         output.push_str(&rest[..start]);
         let after_start = &rest[start + 2..];
@@ -109,7 +246,6 @@ fn expand_env(value: String) -> Result<String, ConfigError> {
             output.push_str(&rest[start..]);
             return Ok(output);
         };
-
         let name = &after_start[..end];
         let replacement = env::var(name).map_err(|source| ConfigError::EnvVar {
             name: name.to_string(),
@@ -118,7 +254,6 @@ fn expand_env(value: String) -> Result<String, ConfigError> {
         output.push_str(&replacement);
         rest = &after_start[end + 1..];
     }
-
     output.push_str(rest);
     Ok(output)
 }
@@ -127,42 +262,102 @@ fn expand_env(value: String) -> Result<String, ConfigError> {
 mod tests {
     use super::*;
 
+    const CONFIG_YAML: &str = r#"
+default: deepseek
+providers:
+  deepseek:
+    type: chat
+    baseurl: https://xxxxxxx
+    apikey: sk-xxxxxxx
+  openai:
+    type: responses
+    baseurl: https://yyyyyyy
+    apikey: sk-yyyyyyy
+  anthropic:
+    type: messages
+    baseurl: https://zzzzzzz
+    apikey: sk-zzzzzzz
+"#;
+
     #[test]
-    fn debug_defaults_to_false() {
+    fn loads_multi_provider_yaml_and_aliases() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("llmapi.toml");
-        std::fs::write(
-            &path,
-            r#"
-server = "127.0.0.1:8080"
-base_url = "https://example.test"
-provider = "openai-chat"
-"#,
-        )
-        .unwrap();
+        let path = dir.path().join("llmapi.yaml");
+        fs::write(&path, CONFIG_YAML).unwrap();
 
         let config = Config::load(path).unwrap();
 
-        assert!(!config.debug);
+        assert_eq!(config.server, DEFAULT_SERVER);
+        assert_eq!(config.default, "deepseek");
+        assert_eq!(config.providers.len(), 3);
+        assert_eq!(
+            config.providers["deepseek"].provider_type,
+            Provider::OpenAiChat
+        );
+        assert_eq!(
+            config.providers["openai"].provider_type,
+            Provider::OpenAiResponses
+        );
+        assert_eq!(
+            config.providers["anthropic"].provider_type,
+            Provider::Anthropic
+        );
     }
 
     #[test]
-    fn loads_debug_from_config() {
+    fn add_and_set_default_round_trip() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("llmapi.toml");
-        std::fs::write(
-            &path,
-            r#"
-server = "127.0.0.1:8080"
-base_url = "https://example.test"
-provider = "openai-chat"
-debug = true
-"#,
-        )
-        .unwrap();
+        let path = dir.path().join("llmapi.yaml");
+        let mut config = Config::load_for_update(&path).unwrap();
+        config
+            .add_provider(
+                "deepseek".into(),
+                ProviderConfig {
+                    provider_type: Provider::OpenAiChat,
+                    base_url: "https://api.deepseek.test/".into(),
+                    api_key: Some("sk-test".into()),
+                },
+            )
+            .unwrap();
+        config
+            .add_provider(
+                "openai".into(),
+                ProviderConfig {
+                    provider_type: Provider::OpenAiResponses,
+                    base_url: "https://api.openai.test".into(),
+                    api_key: None,
+                },
+            )
+            .unwrap();
+        config.set_default("openai").unwrap();
+        config.save(&path).unwrap();
 
-        let config = Config::load(path).unwrap();
+        let loaded = Config::load(path).unwrap();
+        assert_eq!(loaded.default, "openai");
+        assert_eq!(
+            loaded.providers["deepseek"].base_url,
+            "https://api.deepseek.test"
+        );
+    }
 
-        assert!(config.debug);
+    #[test]
+    fn rejects_missing_default_provider() {
+        let error = serde_yaml::from_str::<Config>(CONFIG_YAML)
+            .map(|mut config| {
+                config.default = "missing".into();
+                config.validate().unwrap_err()
+            })
+            .unwrap();
+        assert!(matches!(error, ConfigError::DefaultProviderNotFound(_)));
+    }
+
+    #[test]
+    fn provider_type_accepts_canonical_and_short_names() {
+        assert_eq!(Provider::from_str("chat").unwrap(), Provider::OpenAiChat);
+        assert_eq!(
+            Provider::from_str("openai-responses").unwrap(),
+            Provider::OpenAiResponses
+        );
+        assert_eq!(Provider::from_str("messages").unwrap(), Provider::Anthropic);
     }
 }

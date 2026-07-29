@@ -82,7 +82,7 @@ pub enum Command {
     #[clap(alias = "jwt")]
     Jwttool(jwttool::Cmd),
 
-    /// LLM API proxy
+    /// LLM API protocol conversion proxy
     Llmapi(llmapi::Cmd),
 
     /// Parse various file formats (DS_Store, /proc/net)
