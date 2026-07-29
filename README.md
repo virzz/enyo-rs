@@ -243,7 +243,7 @@ cargo build --release
 cargo test --workspace
 ```
 
-- `crates/enyo`: source directory for the root `enyo` package
+- `src`: source directory for the root `enyo` package
 - `crates/core`: shared input/output and action traits
 - `crates/*`: one library crate per command module
 

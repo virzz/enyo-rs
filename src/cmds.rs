@@ -16,7 +16,6 @@ use enyo_cmd_hash as hash;
 use enyo_cmd_hashpow as hashpow;
 use enyo_cmd_image as image;
 use enyo_cmd_jwttool as jwttool;
-use enyo_cmd_llmapi as llmapi;
 use enyo_cmd_parser as parser;
 use enyo_cmd_qrcode as qrcode;
 use enyo_cmd_sitemap as sitemap;

@@ -2,23 +2,28 @@
 name = "enyo"
 description = "The Cyber Swiss Army Knife for terminal"
 default-run = "enyo"
-build = "crates/enyo/build.rs"
+build = "build.rs"
 
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[package.metadata.enyo.external-commands.llmapi]
+crate = "llmapi"
+type = "Cmd"
+execute = "execute"
+about = "LLM API protocol conversion proxy"
+
 [lib]
-path = "crates/enyo/src/lib.rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "enyo"
-path = "crates/enyo/src/main.rs"
+path = "src/main.rs"
 
 [workspace]
 members = ["crates/core", "crates/*"]
 default-members = ["."]
-exclude = ["crates/enyo"]
 resolver = "2"
 
 [workspace.package]
@@ -39,7 +44,6 @@ enyo-cmd-hash = { path = "crates/hash" }
 enyo-cmd-hashpow = { path = "crates/hashpow" }
 enyo-cmd-image = { path = "crates/image" }
 enyo-cmd-jwttool = { path = "crates/jwttool" }
-enyo-cmd-llmapi = { path = "crates/llmapi" }
 enyo-cmd-parser = { path = "crates/parser" }
 enyo-cmd-qrcode = { path = "crates/qrcode" }
 enyo-cmd-sitemap = { path = "crates/sitemap" }
@@ -47,6 +51,11 @@ enyo-cmd-terminal = { path = "crates/terminal" }
 enyo-cmd-timestamp = { path = "crates/timestamp" }
 enyo-cmd-transform = { path = "crates/transform" }
 enyo-cmd-wechat = { path = "crates/wechat" }
+
+# Local development. Production can switch to the Git dependency below without
+# changing the external-command metadata or build script:
+# llmapi = { git = "https://github.com/virzz/llmapi-rs", rev = "<commit>" }
+llmapi = { path = "../llmapi-rs" }
 
 futures = "0.3.32"
 clap = { version = "4.6.0", features = ["env", "string", "unicode", "derive", "cargo"] }
@@ -130,7 +139,7 @@ enyo-cmd-hash.workspace = true
 enyo-cmd-hashpow.workspace = true
 enyo-cmd-image.workspace = true
 enyo-cmd-jwttool.workspace = true
-enyo-cmd-llmapi.workspace = true
+llmapi.workspace = true
 enyo-cmd-parser.workspace = true
 enyo-cmd-qrcode.workspace = true
 enyo-cmd-sitemap.workspace = true
@@ -145,3 +154,6 @@ clap_complete.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+toml.workspace = true

@@ -29,38 +29,39 @@ make local-install           # Install locally
 
 ### Core Trait
 
-All commands implement `Action` trait (`src/core/action.rs`):
+All built-in commands implement the `Action` trait (`crates/core/src/core/action.rs`):
 
 ```rust
-#[async_trait]
 pub trait Action: Send + Sync {
-    async fn execute(&self) -> anyhow::Result<()>;
+    fn execute(&self) -> impl std::future::Future<Output = anyhow::Result<()>> + Send;
 }
 ```
 
 ### Auto-Generated Command Registry
 
-`build.rs` scans `src/cmds/*/mod.rs` for `pub struct Cmd` and parses metadata comments (`//! @alias:`, `//! @about:`) to auto-generate `src/cmds/mod.rs`. **Do not manually edit `src/cmds/mod.rs`** — it is overwritten on every build.
+`build.rs` scans `crates/*/src/mod.rs` for `pub struct Cmd` and parses metadata comments (`//! @alias:`, `//! @about:`) to auto-generate `src/cmds.rs`. Third-party commands are registered through `package.metadata.enyo.external-commands`. **Do not manually edit `src/cmds.rs`** — it is overwritten on every build.
 
 ### Adding a New Subcommand
 
-1. Create `src/cmds/<name>/mod.rs` with `pub struct Cmd` (clap `Parser` derive)
-2. Add `//! @alias:` and `//! @about:` doc comments at the top of the file
-3. Implement `Action for Cmd`
-4. The build script auto-registers it — no manual registration needed
-5. Directory names with special chars (e.g. `gh-mozhu`) are skipped by the build script
-6. Write corresponding unit tests; test artifacts must be cleaned up.
-7. Check `cargo check;cargo clippy`, then fix it
+1. Create `crates/<name>/src/mod.rs` with `pub struct Cmd` (clap `Parser` derive)
+2. Add `crates/<name>/Cargo.toml` and register it in workspace dependencies
+3. Add `//! @alias:` and `//! @about:` doc comments at the top of the file
+4. Implement `Action for Cmd`
+5. The build script auto-registers it — no manual registration needed
+6. Directory names with special chars (e.g. `gh-mozhu`) are skipped by the build script
+7. Write corresponding unit tests; test artifacts must be cleaned up.
+8. Check `cargo check;cargo clippy`, then fix it
 
-### I/O System (`src/core/io.rs`)
+### I/O System (`crates/core/src/core/io.rs`)
 
 Unified input handling with auto-detection: stdin (default), file (if path exists), or direct argument. Use `Input` struct for flexible input sources. Output goes to stdout by default or file via `-o`.
 
 ### Project Structure
 
 - `src/lib.rs` — `App` struct with clap Parser, logging init, command dispatch
-- `src/core/` — `Action` trait, I/O utilities, external command delegation
-- `src/cmds/` — Each subdirectory is an independent command module (18 commands)
+- `src/cmds.rs` — Generated command enum and dispatch
+- `crates/core/` — `Action` trait, I/O utilities, external command delegation
+- `crates/*` — One independent library crate per built-in command
 - `build.rs` — Auto-generates command enum and dispatch from module metadata
 
 ## Tech Stack
