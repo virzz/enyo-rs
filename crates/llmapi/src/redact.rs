@@ -1,7 +1,3 @@
-pub fn format_json(value: &impl serde::Serialize) -> String {
-    serde_json::to_string_pretty(value).unwrap_or_else(|err| format!("serialize debug json: {err}"))
-}
-
 pub fn key(key: &str) -> String {
     let prefix: String = key.chars().take(6).collect();
     format!("{prefix}...")

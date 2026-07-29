@@ -2,24 +2,27 @@ use axum::{
     body::{to_bytes, Body},
     http::{header, HeaderMap, Method, Response, StatusCode},
 };
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use futures_util::{FutureExt, StreamExt};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tracing::{debug, error, info, warn};
 
 use super::{
     adapters::{
         anthropic::AnthropicAdapter, openai_chat::OpenAiChatAdapter,
         openai_responses::OpenAiResponsesAdapter, AdapterError, RequestAdapter, ResponseAdapter,
-        StreamAdapter,
+        SseDecoder, SseEvent, StreamAdapter, StreamState,
     },
     auth,
-    config::ProviderConfig,
+    config::{Provider, ProviderConfig},
     model::{LLMRequest, LLMResponse},
     protocol::{detect_route, is_transparent, upstream_for, InputFormat, UpstreamFormat},
     redact,
     server::AppState,
 };
+
+const MAX_JSON_BODY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_ERROR_BODY_BYTES: usize = 1024 * 1024;
 
 struct ForwardRequest<'a> {
     state: AppState,
@@ -50,39 +53,43 @@ pub async fn handle(
         );
     };
     if method != Method::POST {
-        return response(
+        return protocol_error_response(
+            &route.input,
             StatusCode::METHOD_NOT_ALLOWED,
-            Bytes::from("llmapi endpoints require POST"),
-            "text/plain",
+            "llmapi endpoints require POST",
+            "invalid_request_error",
         );
     }
     let mut provider = match state.config.provider(route.provider.as_deref()) {
         Ok((_, provider)) => provider.clone(),
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                &route.input,
                 StatusCode::NOT_FOUND,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "invalid_request_error",
             );
         }
     };
     provider.api_key = match provider.api_key() {
         Ok(api_key) => api_key,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                &route.input,
                 StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "api_error",
             );
         }
     };
-    let body = match to_bytes(request.into_body(), usize::MAX).await {
+    let body = match to_bytes(request.into_body(), MAX_JSON_BODY_BYTES).await {
         Ok(body) => body,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                &route.input,
                 StatusCode::BAD_REQUEST,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "invalid_request_error",
             );
         }
     };
@@ -129,6 +136,11 @@ pub fn forward_raw(
 ) -> impl std::future::Future<Output = Response<Body>> + Send {
     let url = upstream_url(&provider.base_url, path, query);
     let upstream_method = method.as_str().to_string();
+    let input = match provider.provider_type {
+        Provider::OpenAiChat => InputFormat::OpenAiChat,
+        Provider::OpenAiResponses => InputFormat::OpenAiResponses,
+        Provider::Anthropic => InputFormat::AnthropicMessages,
+    };
     send_upstream_request(state, provider, headers, method, query, &url, body).map(move |result| {
         match result {
             Ok(upstream) => {
@@ -143,10 +155,11 @@ pub fn forward_raw(
             }
             Err(err) => {
                 error!(target: "llmapi", error = %err, "upstream request failed");
-                response(
+                protocol_error_response(
+                    &input,
                     StatusCode::BAD_GATEWAY,
-                    Bytes::from(err.to_string()),
-                    "text/plain",
+                    &err.to_string(),
+                    "api_error",
                 )
             }
         }
@@ -192,36 +205,43 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
     let input_json: Value = match serde_json::from_slice(&forward.body) {
         Ok(value) => value,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                forward.input,
                 StatusCode::BAD_REQUEST,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "invalid_request_error",
             );
         }
     };
     let llm_request = match input_to_llm(forward.input, input_json) {
         Ok(request) => request,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                forward.input,
                 StatusCode::BAD_REQUEST,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "invalid_request_error",
             );
         }
     };
     debug!(
         target: "llmapi",
-        request = %redact::format_json(&llm_request),
+        source = ?llm_request.source,
+        model = %llm_request.model,
+        stream = llm_request.stream,
+        messages = llm_request.messages.len(),
+        tools = llm_request.tools.len(),
         "normalized LLM request"
     );
     let upstream_json = match llm_to_upstream(forward.upstream, &llm_request) {
         Ok(value) => value,
         Err(err) => {
-            return response(
-                StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
-            );
+            let (status, error_type) = if matches!(&err, AdapterError::Unsupported(_)) {
+                (StatusCode::BAD_REQUEST, "invalid_request_error")
+            } else {
+                (StatusCode::BAD_GATEWAY, "api_error")
+            };
+            return protocol_error_response(forward.input, status, &err.to_string(), error_type);
         }
     };
 
@@ -240,10 +260,11 @@ async fn convert_and_forward(forward: ForwardRequest<'_>) -> Response<Body> {
         Ok(response) => response,
         Err(err) => {
             error!(target: "llmapi", error = %err, "upstream request failed");
-            return response(
+            return protocol_error_response(
+                forward.input,
                 StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "api_error",
             );
         }
     };
@@ -277,9 +298,15 @@ fn llm_to_upstream(upstream: UpstreamFormat, request: &LLMRequest) -> Result<Val
 }
 
 fn upstream_url(base_url: &str, path: &str, query: Option<&str>) -> String {
+    let base_url = base_url.trim_end_matches('/');
+    let endpoint = if base_url.ends_with(path) {
+        base_url.to_string()
+    } else {
+        format!("{base_url}{path}")
+    };
     match query.and_then(forwarded_query) {
-        Some(query) => format!("{base_url}{path}?{query}"),
-        None => format!("{base_url}{path}"),
+        Some(query) => format!("{endpoint}?{query}"),
+        None => endpoint,
     }
 }
 
@@ -307,72 +334,195 @@ async fn convert_response_back(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_string();
+    let response_headers = upstream_response.headers().clone();
     if !status.is_success() {
-        return raw_upstream_response(upstream_response);
+        return converted_error_response(upstream_response, input).await;
     }
 
     if content_type.contains("text/event-stream") {
         return converted_sse_response(upstream_response, *input, upstream);
     }
 
-    let body = upstream_response.bytes().await.unwrap_or_default();
+    let body = match read_upstream_body(upstream_response, MAX_JSON_BODY_BYTES).await {
+        Ok(body) => body,
+        Err(err) => {
+            let mut response =
+                protocol_error_response(input, StatusCode::BAD_GATEWAY, &err, "api_error");
+            copy_response_metadata_headers(&response_headers, response.headers_mut());
+            return response;
+        }
+    };
     let value: Value = match serde_json::from_slice(&body) {
         Ok(value) => value,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                input,
                 StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "api_error",
             );
         }
     };
     let llm = match upstream_to_llm(upstream, value) {
         Ok(value) => value,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                input,
                 StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "api_error",
             );
         }
     };
     debug!(
         target: "llmapi",
-        response = %redact::format_json(&llm),
+        source = ?llm.source,
+        id = llm.id.as_deref(),
+        model = llm.model.as_deref(),
+        choices = llm.choices.len(),
+        has_usage = llm.usage.is_some(),
         "normalized LLM response"
     );
     let output = match llm_to_input(input, &llm) {
         Ok(value) => value,
         Err(err) => {
-            return response(
+            return protocol_error_response(
+                input,
                 StatusCode::BAD_GATEWAY,
-                Bytes::from(err.to_string()),
-                "text/plain",
+                &err.to_string(),
+                "api_error",
             );
         }
     };
 
-    response(
+    let mut response = response(
         StatusCode::OK,
         Bytes::from(serde_json::to_vec(&output).unwrap()),
         "application/json",
-    )
+    );
+    copy_response_metadata_headers(&response_headers, response.headers_mut());
+    response
 }
 
 fn raw_upstream_response(upstream: reqwest::Response) -> Response<Body> {
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let content_type = upstream
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, content_type)
+    let headers = upstream.headers().clone();
+    let mut builder = Response::builder().status(status);
+    copy_response_headers(&headers, builder.headers_mut().unwrap());
+    builder
         .body(Body::from_stream(upstream.bytes_stream()))
         .unwrap()
+}
+
+async fn converted_error_response(
+    upstream: reqwest::Response,
+    input: &InputFormat,
+) -> Response<Body> {
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let headers = upstream.headers().clone();
+    let body = match read_upstream_body(upstream, MAX_ERROR_BODY_BYTES).await {
+        Ok(body) => body,
+        Err(err) => {
+            let mut response = protocol_error_response(input, status, &err, "api_error");
+            copy_response_metadata_headers(&headers, response.headers_mut());
+            return response;
+        }
+    };
+    let value = serde_json::from_slice::<Value>(&body).ok();
+    let error = value.as_ref().and_then(|value| value.get("error"));
+    let message = error
+        .and_then(|error| error.get("message"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            value
+                .as_ref()
+                .and_then(|value| value.get("message"))
+                .and_then(Value::as_str)
+        })
+        .unwrap_or_else(|| std::str::from_utf8(&body).unwrap_or("upstream request failed"));
+    let error_type = error
+        .and_then(|error| error.get("type"))
+        .and_then(Value::as_str)
+        .unwrap_or("api_error");
+    let mut response = protocol_error_response(input, status, message, error_type);
+    copy_response_metadata_headers(&headers, response.headers_mut());
+    response
+}
+
+async fn read_upstream_body(upstream: reqwest::Response, limit: usize) -> Result<Bytes, String> {
+    if upstream
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err(format!("upstream response body exceeds {limit} bytes"));
+    }
+    let mut stream = upstream.bytes_stream();
+    let mut body = BytesMut::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|err| format!("read upstream response body: {err}"))?;
+        if body.len().saturating_add(chunk.len()) > limit {
+            return Err(format!("upstream response body exceeds {limit} bytes"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body.freeze())
+}
+
+fn protocol_error_response(
+    input: &InputFormat,
+    status: StatusCode,
+    message: &str,
+    error_type: &str,
+) -> Response<Body> {
+    let value = match input {
+        InputFormat::AnthropicMessages => json!({
+            "type": "error",
+            "error": {"type": error_type, "message": message}
+        }),
+        InputFormat::OpenAiChat | InputFormat::OpenAiResponses => json!({
+            "error": {"message": message, "type": error_type, "param": null, "code": null}
+        }),
+    };
+    response(
+        status,
+        Bytes::from(serde_json::to_vec(&value).unwrap()),
+        "application/json",
+    )
+}
+
+fn copy_response_headers(source: &HeaderMap, target: &mut HeaderMap) {
+    for (name, value) in source {
+        let name_text = name.as_str();
+        if name == header::CONTENT_TYPE
+            || name == header::CACHE_CONTROL
+            || name == header::RETRY_AFTER
+            || matches!(
+                name_text,
+                "x-request-id" | "request-id" | "anthropic-request-id" | "openai-processing-ms"
+            )
+            || name_text.starts_with("x-ratelimit-")
+        {
+            target.insert(name.clone(), value.clone());
+        }
+    }
+}
+
+fn copy_response_metadata_headers(source: &HeaderMap, target: &mut HeaderMap) {
+    for (name, value) in source {
+        let name_text = name.as_str();
+        if name == header::CACHE_CONTROL
+            || name == header::RETRY_AFTER
+            || matches!(
+                name_text,
+                "x-request-id" | "request-id" | "anthropic-request-id" | "openai-processing-ms"
+            )
+            || name_text.starts_with("x-ratelimit-")
+        {
+            target.insert(name.clone(), value.clone());
+        }
+    }
 }
 
 fn upstream_to_llm(upstream: UpstreamFormat, value: Value) -> Result<LLMResponse, AdapterError> {
@@ -393,23 +543,25 @@ fn llm_to_input(input: &InputFormat, response: &LLMResponse) -> Result<Value, Ad
 
 fn parse_stream_event(
     upstream: UpstreamFormat,
-    event: &str,
-) -> Result<Option<super::model::LLMStreamEvent>, AdapterError> {
+    event: &SseEvent,
+    state: &mut StreamState,
+) -> Result<Vec<super::model::LLMStreamEvent>, AdapterError> {
     match upstream {
-        UpstreamFormat::OpenAiChat => OpenAiChatAdapter::parse_stream_event(event),
-        UpstreamFormat::OpenAiResponses => OpenAiResponsesAdapter::parse_stream_event(event),
-        UpstreamFormat::AnthropicMessages => AnthropicAdapter::parse_stream_event(event),
+        UpstreamFormat::OpenAiChat => OpenAiChatAdapter::parse_stream_event(event, state),
+        UpstreamFormat::OpenAiResponses => OpenAiResponsesAdapter::parse_stream_event(event, state),
+        UpstreamFormat::AnthropicMessages => AnthropicAdapter::parse_stream_event(event, state),
     }
 }
 
-fn format_stream_event(
+fn format_stream_events(
     input: &InputFormat,
-    event: &super::model::LLMStreamEvent,
-) -> Result<Option<String>, AdapterError> {
+    events: &[super::model::LLMStreamEvent],
+    state: &mut StreamState,
+) -> Result<Vec<SseEvent>, AdapterError> {
     match input {
-        InputFormat::OpenAiChat => OpenAiChatAdapter::format_stream_event(event),
-        InputFormat::OpenAiResponses => OpenAiResponsesAdapter::format_stream_event(event),
-        InputFormat::AnthropicMessages => AnthropicAdapter::format_stream_event(event),
+        InputFormat::OpenAiChat => OpenAiChatAdapter::format_stream_events(events, state),
+        InputFormat::OpenAiResponses => OpenAiResponsesAdapter::format_stream_events(events, state),
+        InputFormat::AnthropicMessages => AnthropicAdapter::format_stream_events(events, state),
     }
 }
 
@@ -418,61 +570,108 @@ fn converted_sse_response(
     input: InputFormat,
     upstream: UpstreamFormat,
 ) -> Response<Body> {
+    let upstream_headers = upstream_response.headers().clone();
     let stream = upstream_response.bytes_stream();
     let converted = async_stream::stream! {
         let mut stream = stream;
-        let mut buffer = String::new();
+        let mut decoder = SseDecoder::default();
+        let mut source_state = StreamState::default();
+        let mut target_state = StreamState::default();
         while let Some(chunk) = stream.next().await {
             let chunk = match chunk {
                 Ok(chunk) => chunk,
                 Err(err) => {
-                    yield Err::<Bytes, std::io::Error>(std::io::Error::other(err));
+                    for output in stream_error_events(&input, &mut target_state, err.to_string()) {
+                        yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                    }
                     return;
                 }
             };
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-            while let Some(index) = buffer.find("\n\n") {
-                let event = buffer[..index].trim().to_string();
-                buffer.drain(..index + 2);
-                if event.is_empty() {
-                    continue;
+            let events = match decoder.push(&chunk) {
+                Ok(events) => events,
+                Err(err) => {
+                    warn!(target: "llmapi", error = %err, "stream decoding failed");
+                    for output in stream_error_events(&input, &mut target_state, err.to_string()) {
+                        yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                    }
+                    return;
                 }
-                if let Some(text) = convert_sse_event(&event, &input, upstream) {
-                    yield Ok::<Bytes, std::io::Error>(Bytes::from(text));
+            };
+            for event in events {
+                match convert_sse_event(&event, &input, upstream, &mut source_state, &mut target_state) {
+                    Ok(outputs) => for output in outputs {
+                        yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                    },
+                    Err(err) => {
+                        warn!(target: "llmapi", error = %err, "stream event conversion failed");
+                        for output in stream_error_events(&input, &mut target_state, err.to_string()) {
+                            yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                        }
+                        return;
+                    }
                 }
             }
         }
-        let event = buffer.trim();
-        if !event.is_empty() {
-            if let Some(text) = convert_sse_event(event, &input, upstream) {
-                yield Ok::<Bytes, std::io::Error>(Bytes::from(text));
+        match decoder.finish() {
+            Ok(events) => for event in events {
+                match convert_sse_event(&event, &input, upstream, &mut source_state, &mut target_state) {
+                    Ok(outputs) => for output in outputs {
+                        yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                    },
+                    Err(err) => {
+                        for output in stream_error_events(&input, &mut target_state, err.to_string()) {
+                            yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                        }
+                        return;
+                    }
+                }
+            },
+            Err(err) => {
+                for output in stream_error_events(&input, &mut target_state, err.to_string()) {
+                    yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
+                }
+                return;
+            }
+        }
+        if !source_state.ended {
+            for output in stream_error_events(&input, &mut target_state, "upstream stream ended before a terminal event".into()) {
+                yield Ok::<Bytes, std::io::Error>(Bytes::from(output.encode()));
             }
         }
     };
 
-    Response::builder()
+    let mut response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header("x-accel-buffering", "no")
         .body(Body::from_stream(converted))
-        .unwrap()
+        .unwrap();
+    copy_response_metadata_headers(&upstream_headers, response.headers_mut());
+    response
 }
 
-fn convert_sse_event(event: &str, input: &InputFormat, upstream: UpstreamFormat) -> Option<String> {
-    match parse_stream_event(upstream, event) {
-        Ok(Some(llm_event)) => match format_stream_event(input, &llm_event) {
-            Ok(Some(text)) => Some(text),
-            Ok(None) => None,
-            Err(err) => {
-                warn!(target: "llmapi", error = %err, "stream event conversion failed");
-                None
-            }
-        },
-        Ok(None) => None,
-        Err(err) => {
-            warn!(target: "llmapi", error = %err, "stream event conversion failed");
-            None
-        }
-    }
+fn convert_sse_event(
+    event: &SseEvent,
+    input: &InputFormat,
+    upstream: UpstreamFormat,
+    source_state: &mut StreamState,
+    target_state: &mut StreamState,
+) -> Result<Vec<SseEvent>, AdapterError> {
+    let events = parse_stream_event(upstream, event, source_state)?;
+    format_stream_events(input, &events, target_state)
+}
+
+fn stream_error_events(
+    input: &InputFormat,
+    state: &mut StreamState,
+    message: String,
+) -> Vec<SseEvent> {
+    let events = [super::model::LLMStreamEvent::Error {
+        message,
+        metadata: Default::default(),
+    }];
+    format_stream_events(input, &events, state).unwrap_or_default()
 }
 
 fn wants_upstream_raw(uri: &axum::http::Uri, headers: &HeaderMap) -> bool {
@@ -506,5 +705,35 @@ mod tests {
             ),
             "https://api.example.test/v1/responses?beta=true"
         );
+    }
+
+    #[test]
+    fn accepts_base_url_that_already_contains_endpoint() {
+        assert_eq!(
+            upstream_url("https://api.anthropic.test/v1/messages", "/messages", None),
+            "https://api.anthropic.test/v1/messages"
+        );
+        assert_eq!(
+            upstream_url("https://api.openai.test/v1", "/responses", None),
+            "https://api.openai.test/v1/responses"
+        );
+    }
+
+    #[tokio::test]
+    async fn bounds_buffered_upstream_response_bodies() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(
+                listener,
+                axum::Router::new().route("/", axum::routing::get(|| async { "12345" })),
+            )
+            .await
+            .unwrap();
+        });
+        let upstream = reqwest::get(format!("http://{address}")).await.unwrap();
+
+        let error = read_upstream_body(upstream, 4).await.unwrap_err();
+        assert!(error.contains("exceeds 4 bytes"));
     }
 }
