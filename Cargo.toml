@@ -50,6 +50,7 @@ enyo-cmd-sitemap = { path = "crates/sitemap" }
 enyo-cmd-terminal = { path = "crates/terminal" }
 enyo-cmd-timestamp = { path = "crates/timestamp" }
 enyo-cmd-transform = { path = "crates/transform" }
+enyo-cmd-wallpaper = { path = "crates/wallpaper" }
 enyo-cmd-wechat = { path = "crates/wechat" }
 
 # Local development. Production can switch to the Git dependency below without
@@ -125,6 +126,9 @@ uuid = { version = "1", features = ["v4"] }
 env_logger = "0.11.8"
 tempfile = "3.15"
 tower = "0.5"
+plist = "1.9.0"
+core-foundation = "0.10.1"
+core-foundation-sys = "0.8.7"
 
 [dependencies]
 enyo-core.workspace = true
@@ -146,6 +150,7 @@ enyo-cmd-sitemap.workspace = true
 enyo-cmd-terminal.workspace = true
 enyo-cmd-timestamp.workspace = true
 enyo-cmd-transform.workspace = true
+enyo-cmd-wallpaper.workspace = true
 enyo-cmd-wechat.workspace = true
 
 anyhow.workspace = true

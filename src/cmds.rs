@@ -22,6 +22,7 @@ use enyo_cmd_sitemap as sitemap;
 use enyo_cmd_terminal as terminal;
 use enyo_cmd_timestamp as timestamp;
 use enyo_cmd_transform as transform;
+use enyo_cmd_wallpaper as wallpaper;
 use enyo_cmd_wechat as wechat;
 
 use enyo_core::{core::external, Action};
@@ -107,6 +108,10 @@ pub enum Command {
     #[clap(alias = "tf")]
     Transform(transform::Cmd),
 
+    /// Manage macOS System Settings wallpaper folders and photos
+    #[clap(alias = "wp", alias = "wallpaper-folder")]
+    Wallpaper(wallpaper::Cmd),
+
     /// Decrypt Wechat DB files
     #[clap(alias = "vx")]
     Wechat(wechat::Cmd),
@@ -134,6 +139,7 @@ impl Command {
             Command::Terminal(c) => c.execute().await,
             Command::Timestamp(c) => c.execute().await,
             Command::Transform(c) => c.execute().await,
+            Command::Wallpaper(c) => c.execute().await,
             Command::Wechat(c) => c.execute().await,
             _ => Err(anyhow::anyhow!("Unknown command")),
         }

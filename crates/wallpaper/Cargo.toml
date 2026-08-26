@@ -1,0 +1,24 @@
+[package]
+name = "enyo-cmd-wallpaper"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[lib]
+path = "src/mod.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+dirs.workspace = true
+enyo-core.workspace = true
+plist.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation.workspace = true
+core-foundation-sys.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
