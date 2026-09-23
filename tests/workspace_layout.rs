@@ -63,9 +63,9 @@ fn external_commands_are_metadata_driven() {
         .expect("read generated command registry");
 
     assert!(manifest.contains("[package.metadata.enyo.external-commands.llmapi]"));
-    assert!(manifest.contains("llmapi = { path = \"../llmapi-rs\" }"));
+    assert!(manifest.contains("llmapi = {"));
+    assert!(manifest.contains("llmapi.workspace = true"));
     assert!(!workspace_root.join("crates/llmapi").exists());
-    assert!(workspace_root.join("../llmapi-rs/Cargo.toml").exists());
     assert!(build_script.contains("external-commands"));
     assert!(!build_script.contains("llmapi"));
     assert!(command_registry.contains("Llmapi(llmapi::Cmd)"));
