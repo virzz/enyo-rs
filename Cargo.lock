@@ -640,6 +640,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "comfy-table"
+version = "8.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "136c8c4c3823846e8ba6d4bda011b4e5d5827b8bb0ac26c31f9ab31abe9f54f2"
+dependencies = [
+ "crossterm",
+ "unicode-segmentation",
+ "unicode-width",
+]
+
+[[package]]
 name = "console"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -981,7 +992,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1051,7 +1062,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1121,7 +1132,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1191,7 +1202,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1261,7 +1272,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1331,7 +1342,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1401,7 +1412,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1472,7 +1483,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1542,7 +1553,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1612,7 +1623,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1682,7 +1693,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1752,7 +1763,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1822,7 +1833,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1893,7 +1904,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -1963,7 +1974,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -2033,7 +2044,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -2103,7 +2114,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -2189,7 +2200,7 @@ dependencies = [
  "chrono",
  "clap",
  "colored_json",
- "comfy-table",
+ "comfy-table 7.2.2",
  "csv",
  "ctr",
  "dirs",
@@ -3192,6 +3203,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 [[package]]
 name = "llmapi"
 version = "0.1.0"
+source = "git+https://github.com/virzz/llmapi-rs?tag=v0.1.0#f6f796449723acd0b25fbdf9d7d65ad58cc1de54"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -3199,6 +3211,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "comfy-table 8.0.0",
  "dirs",
  "futures-util",
  "reqwest",

@@ -53,10 +53,7 @@ enyo-cmd-transform = { path = "crates/transform" }
 enyo-cmd-wallpaper = { path = "crates/wallpaper" }
 enyo-cmd-wechat = { path = "crates/wechat" }
 
-# Local development. Production can switch to the Git dependency below without
-# changing the external-command metadata or build script:
-# llmapi = { git = "https://github.com/virzz/llmapi-rs", rev = "<commit>" }
-llmapi = { path = "../llmapi-rs" }
+llmapi = { git = "https://github.com/virzz/llmapi-rs", tag = "v0.1.0" }
 
 futures = "0.3.32"
 clap = { version = "4.6.0", features = ["env", "string", "unicode", "derive", "cargo"] }
